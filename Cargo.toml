@@ -1,0 +1,10 @@
+[package]
+name = "noki"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "A version control powered, AI friendly note taking app"
+repository = "https://github.com/paulvandermeijs/noki"
+readme = "README.md"
+
+[dependencies]
