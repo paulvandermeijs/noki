@@ -12,6 +12,33 @@ pub trait VersionControl {
     fn write_file(&self, path: &str, contents: &str, message: &str) -> Result<()>;
 }
 
+use crate::config::Config;
+use crate::vcs::git::GitBackend;
+use std::path::PathBuf;
+
+/// Open the working clone for the configured repository.
+pub fn open_backend(config: &Config) -> Result<Box<dyn VersionControl>> {
+    let url = config.repository()?;
+    let dest = clone_dir(url)?;
+    Ok(Box::new(GitBackend::open_or_clone(url, &dest)?))
+}
+
+fn clone_dir(url: &str) -> Result<PathBuf> {
+    let dirs = directories::BaseDirs::new()
+        .ok_or_else(|| anyhow::anyhow!("Cannot determine a data directory"))?;
+    let sanitized: String = url
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    Ok(dirs.data_dir().join("noki").join("repos").join(sanitized))
+}
+
 #[cfg(test)]
 pub(crate) struct MemoryBackend {
     files: std::sync::Mutex<std::collections::BTreeMap<String, String>>,
