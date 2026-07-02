@@ -265,4 +265,21 @@ mod tests {
             note.content
         );
     }
+
+    #[test]
+    fn round_trips_content_starting_with_blank_line() {
+        let mut note = parse_note(RAW).unwrap();
+        note.content = "\nBody after a blank line\n".to_string();
+        let raw = to_raw(&note).unwrap();
+        let reparsed = parse_note(&raw).unwrap();
+        assert_eq!(reparsed.content, "\nBody after a blank line\n");
+    }
+
+    #[test]
+    fn frontmatter_closed_at_eof_yields_empty_content() {
+        let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---";
+        let note = parse_note(raw).unwrap();
+        assert_eq!(note.meta.title, "T");
+        assert_eq!(note.content, "");
+    }
 }
