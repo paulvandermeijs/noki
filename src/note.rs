@@ -1,5 +1,7 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, FixedOffset};
+use markdown::mdast::Node;
+use markdown::{Constructs, ParseOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -23,24 +25,30 @@ pub struct Note {
     pub content: String,
 }
 
-/// Parse a raw note (`---` YAML frontmatter followed by a Markdown body).
+/// Parse a raw note (`---` YAML or `+++` TOML frontmatter followed by a Markdown body).
 pub fn parse_note(raw: &str) -> Result<Note> {
-    let body = raw
-        .strip_prefix("---\n")
-        .context("Note is missing frontmatter")?;
-    let marker = body
-        .find("\n---\n")
-        .context("Note frontmatter is not terminated")?;
-    let yaml = &body[..marker];
-    let mut content = &body[marker + "\n---\n".len()..];
-    if let Some(rest) = content.strip_prefix('\n') {
-        content = rest; // drop the single blank separator line
-    }
-    let meta: Meta = serde_yaml_ng::from_str(yaml).context("Invalid note frontmatter")?;
-    Ok(Note {
-        meta,
-        content: content.to_string(),
-    })
+    let tree = markdown::to_mdast(raw, &parse_options())
+        .map_err(|error| anyhow!("Invalid note markdown: {error}"))?;
+    let Node::Root(root) = &tree else {
+        return Err(anyhow!("Note is missing frontmatter"));
+    };
+
+    let front = root
+        .children
+        .iter()
+        .find(|node| matches!(node, Node::Yaml(_) | Node::Toml(_)))
+        .ok_or_else(|| anyhow!("Note is missing frontmatter"))?;
+
+    let meta: Meta = match front {
+        Node::Yaml(node) => {
+            serde_yaml_ng::from_str(&node.value).context("Invalid note frontmatter")?
+        }
+        Node::Toml(node) => toml::from_str(&node.value).context("Invalid note frontmatter")?,
+        _ => return Err(anyhow!("Note is missing frontmatter")),
+    };
+
+    let content = body_after(raw, node_end(front));
+    Ok(Note { meta, content })
 }
 
 /// Serialize a note back into its raw on-disk representation.
@@ -68,6 +76,31 @@ pub fn note_path(template: &str, title: &str, when: DateTime<FixedOffset>) -> St
     let slug = slug::slugify(title);
     let with_title = template.replace("%title", &slug);
     format!("{}.md", when.format(&with_title))
+}
+
+/// Parse options with the frontmatter construct enabled (GFM otherwise).
+fn parse_options() -> ParseOptions {
+    ParseOptions {
+        constructs: Constructs {
+            frontmatter: true,
+            ..Constructs::gfm()
+        },
+        ..ParseOptions::gfm()
+    }
+}
+
+/// Byte offset just past the end of a node (0 if it has no position).
+fn node_end(node: &Node) -> usize {
+    node.position().map_or(0, |position| position.end.offset)
+}
+
+/// The raw body text after the frontmatter: drop the newline ending the
+/// closing fence line and one optional blank separator line.
+fn body_after(raw: &str, frontmatter_end: usize) -> String {
+    let rest = &raw[frontmatter_end..];
+    let rest = rest.strip_prefix('\n').unwrap_or(rest);
+    let rest = rest.strip_prefix('\n').unwrap_or(rest);
+    rest.to_string()
 }
 
 pub(crate) mod rfc3339 {
@@ -131,5 +164,36 @@ mod tests {
         let when = at("2026-06-02T10:00:00+01:00");
         let path = note_path(DEFAULT_FILENAME, "My new note", when);
         assert_eq!(path, "2026/06/02/10:00:00-my-new-note.md");
+    }
+
+    #[test]
+    fn reads_toml_frontmatter() {
+        let raw = "+++\ntitle = \"T\"\npath = \"p.md\"\nlabels = []\ncreated = \"2026-06-02T10:00:00+01:00\"\nupdated = \"2026-06-02T10:00:02+01:00\"\n+++\n\nBody\n";
+        let note = parse_note(raw).unwrap();
+        assert_eq!(note.meta.title, "T");
+        assert_eq!(note.meta.created.to_rfc3339(), "2026-06-02T10:00:00+01:00");
+        assert_eq!(note.content, "Body\n");
+    }
+
+    #[test]
+    fn body_thematic_break_is_not_frontmatter() {
+        let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nAbove\n\n---\n\nBelow\n";
+        let note = parse_note(raw).unwrap();
+        assert_eq!(note.meta.title, "T");
+        assert!(
+            note.content.contains("Above"),
+            "content was: {:?}",
+            note.content
+        );
+        assert!(
+            note.content.contains("---"),
+            "content was: {:?}",
+            note.content
+        );
+        assert!(
+            note.content.contains("Below"),
+            "content was: {:?}",
+            note.content
+        );
     }
 }
