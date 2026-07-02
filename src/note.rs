@@ -49,6 +49,27 @@ pub fn to_raw(note: &Note) -> Result<String> {
     Ok(format!("---\n{yaml}---\n\n{}", note.content))
 }
 
+pub const DEFAULT_FILENAME: &str = "%Y/%m/%d/%H:%M:%S-%title";
+
+/// Derive a human title from the first non-empty line of the content.
+pub fn title_from_content(content: &str) -> String {
+    content
+        .lines()
+        .map(|line| line.trim_start_matches('#').trim())
+        .find(|line| !line.is_empty())
+        .unwrap_or("untitled")
+        .to_string()
+}
+
+/// Render a note's relative path from a template. `%title` is replaced with a
+/// slug of the title; all other `%` specifiers are `chrono` date formats.
+/// The `.md` extension is always appended.
+pub fn note_path(template: &str, title: &str, when: DateTime<FixedOffset>) -> String {
+    let slug = slug::slugify(title);
+    let with_title = template.replace("%title", &slug);
+    format!("{}.md", when.format(&with_title))
+}
+
 pub(crate) mod rfc3339 {
     use chrono::{DateTime, FixedOffset, SecondsFormat};
     use serde::{Deserialize, Deserializer, Serializer};
@@ -68,6 +89,10 @@ mod tests {
     use super::*;
 
     const RAW: &str = "---\ntitle: My new note\npath: 2026/06/02/10:00:00-my-new-note.md\nlabels:\n- needs-review\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nHello, World!\n";
+
+    fn at(s: &str) -> DateTime<FixedOffset> {
+        DateTime::parse_from_rfc3339(s).unwrap()
+    }
 
     #[test]
     fn parses_frontmatter_and_body() {
@@ -92,5 +117,19 @@ mod tests {
     fn missing_frontmatter_is_an_error() {
         let err = parse_note("no frontmatter here").unwrap_err();
         assert_eq!(err.to_string(), "Note is missing frontmatter");
+    }
+
+    #[test]
+    fn title_uses_first_non_empty_line_without_heading_marks() {
+        assert_eq!(title_from_content("# My new note\n\nbody"), "My new note");
+        assert_eq!(title_from_content("plain title"), "plain title");
+        assert_eq!(title_from_content("   "), "untitled");
+    }
+
+    #[test]
+    fn note_path_expands_date_and_slugged_title() {
+        let when = at("2026-06-02T10:00:00+01:00");
+        let path = note_path(DEFAULT_FILENAME, "My new note", when);
+        assert_eq!(path, "2026/06/02/10:00:00-my-new-note.md");
     }
 }
