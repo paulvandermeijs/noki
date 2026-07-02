@@ -12,7 +12,7 @@ fn main() {
     let code = match run(cli) {
         Ok(()) => 0,
         Err(error) => {
-            eprintln!("{error}");
+            eprintln!("{error:#}");
             1
         }
     };

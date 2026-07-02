@@ -34,7 +34,13 @@ pub fn get_content_from_editor(input: Option<String>) -> Result<String> {
 }
 
 fn editor_command() -> Option<String> {
-    std::env::var("VISUAL")
-        .or_else(|_| std::env::var("EDITOR"))
-        .ok()
+    for key in ["VISUAL", "EDITOR"] {
+        if let Ok(value) = std::env::var(key) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
 }

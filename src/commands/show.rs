@@ -1,13 +1,11 @@
 use crate::note::parse_note;
 use crate::output;
 use crate::vcs::VersionControl;
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 /// Show a single note identified by its repository-relative path.
 pub fn run(vcs: &dyn VersionControl, path: &str, json: bool, raw: bool) -> Result<()> {
-    let contents = vcs
-        .read_file(path)
-        .with_context(|| format!("No note at {path}"))?;
+    let contents = vcs.read_file(path)?;
 
     if raw {
         print!("{contents}");

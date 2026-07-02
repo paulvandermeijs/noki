@@ -1,6 +1,9 @@
 pub mod git;
 
+use crate::config::Config;
+use crate::vcs::git::GitBackend;
 use anyhow::Result;
+use std::path::PathBuf;
 
 /// Backend-agnostic storage for notes, backed by a version-control system.
 pub trait VersionControl {
@@ -11,10 +14,6 @@ pub trait VersionControl {
     /// Write a note file and record it (commit, and push when a remote exists).
     fn write_file(&self, path: &str, contents: &str, message: &str) -> Result<()>;
 }
-
-use crate::config::Config;
-use crate::vcs::git::GitBackend;
-use std::path::PathBuf;
 
 /// Open the working clone for the configured repository.
 pub fn open_backend(config: &Config) -> Result<Box<dyn VersionControl>> {

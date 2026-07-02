@@ -62,7 +62,7 @@ fn collect_notes(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let path = entry?.path();
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if name == ".git" {
+        if name.starts_with('.') {
             continue;
         }
         if path.is_dir() {

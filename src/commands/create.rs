@@ -38,6 +38,8 @@ pub(crate) fn save_note(
     }
 }
 
+const RESERVED_META_KEYS: [&str; 5] = ["title", "path", "labels", "created", "updated"];
+
 pub(crate) fn build_note(
     content: &str,
     config: &Config,
@@ -58,6 +60,9 @@ pub(crate) fn build_note(
 
     let mut extra = BTreeMap::new();
     for (key, value) in &config.note.meta {
+        if RESERVED_META_KEYS.contains(&key.as_str()) {
+            continue;
+        }
         if let Ok(value) = serde_yaml_ng::to_value(value) {
             extra.insert(key.clone(), value);
         }
@@ -125,5 +130,28 @@ mod tests {
         let backend = MemoryBackend::new();
         assert!(save_note(&backend, &config, "  ", now()).unwrap().is_none());
         assert!(backend.list_files().unwrap().is_empty());
+    }
+
+    #[test]
+    fn build_note_merges_static_meta_but_ignores_reserved_keys() {
+        let mut config = Config::default();
+        config.note.meta.insert(
+            "author".to_string(),
+            toml::Value::String("Paul".to_string()),
+        );
+        config.note.meta.insert(
+            "title".to_string(),
+            toml::Value::String("hacked".to_string()),
+        );
+
+        let (_, raw) = build_note("# Real Title\n\nbody", &config, now()).unwrap();
+        let note = crate::note::parse_note(&raw).unwrap();
+
+        assert_eq!(note.meta.title, "Real Title");
+        assert_eq!(
+            note.meta.extra.get("author"),
+            Some(&serde_yaml_ng::to_value("Paul").unwrap())
+        );
+        assert!(!note.meta.extra.contains_key("title"));
     }
 }

@@ -31,4 +31,13 @@ mod tests {
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].meta.title, "A note");
     }
+
+    #[test]
+    fn load_notes_skips_unparseable_files() {
+        let backend = MemoryBackend::with_files(&[
+            ("2026/06/02/a.md", NOTE),
+            ("README.md", "no frontmatter here"),
+        ]);
+        assert_eq!(crate::commands::load_notes(&backend).unwrap().len(), 1);
+    }
 }

@@ -11,7 +11,10 @@ pub(crate) fn load_notes(vcs: &dyn VersionControl) -> Result<Vec<Note>> {
     let mut notes = Vec::new();
     for path in vcs.list_files()? {
         let raw = vcs.read_file(&path)?;
-        notes.push(parse_note(&raw)?);
+        match parse_note(&raw) {
+            Ok(note) => notes.push(note),
+            Err(error) => log::warn!("Skipping {path}: {error}"),
+        }
     }
     Ok(notes)
 }
