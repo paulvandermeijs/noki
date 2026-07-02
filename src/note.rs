@@ -59,14 +59,39 @@ pub fn to_raw(note: &Note) -> Result<String> {
 
 pub const DEFAULT_FILENAME: &str = "%Y/%m/%d/%H:%M:%S-%title";
 
-/// Derive a human title from the first non-empty line of the content.
+/// Derive a human title from the content: the first heading, else the first
+/// line of the first paragraph, else "untitled".
 pub fn title_from_content(content: &str) -> String {
-    content
-        .lines()
-        .map(|line| line.trim_start_matches('#').trim())
-        .find(|line| !line.is_empty())
-        .unwrap_or("untitled")
-        .to_string()
+    let Ok(tree) = markdown::to_mdast(content, &parse_options()) else {
+        return "untitled".to_string();
+    };
+    let Node::Root(root) = tree else {
+        return "untitled".to_string();
+    };
+
+    for node in &root.children {
+        match node {
+            Node::Heading(heading) => {
+                let text = inline_text(&heading.children);
+                let text = text.trim();
+                if !text.is_empty() {
+                    return text.to_string();
+                }
+            }
+            Node::Paragraph(paragraph) => {
+                let text = inline_text(&paragraph.children);
+                if let Some(line) = text.lines().next() {
+                    let line = line.trim();
+                    if !line.is_empty() {
+                        return line.to_string();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    "untitled".to_string()
 }
 
 /// Render a note's relative path from a template. `%title` is replaced with a
@@ -101,6 +126,23 @@ fn body_after(raw: &str, frontmatter_end: usize) -> String {
     let rest = rest.strip_prefix('\n').unwrap_or(rest);
     let rest = rest.strip_prefix('\n').unwrap_or(rest);
     rest.to_string()
+}
+
+/// The concatenated plain text of inline nodes, with markup stripped.
+fn inline_text(nodes: &[Node]) -> String {
+    let mut text = String::new();
+    for node in nodes {
+        match node {
+            Node::Text(value) => text.push_str(&value.value),
+            Node::InlineCode(value) => text.push_str(&value.value),
+            other => {
+                if let Some(children) = other.children() {
+                    text.push_str(&inline_text(children));
+                }
+            }
+        }
+    }
+    text
 }
 
 pub(crate) mod rfc3339 {
@@ -157,6 +199,33 @@ mod tests {
         assert_eq!(title_from_content("# My new note\n\nbody"), "My new note");
         assert_eq!(title_from_content("plain title"), "plain title");
         assert_eq!(title_from_content("   "), "untitled");
+    }
+
+    #[test]
+    fn title_reads_setext_heading() {
+        assert_eq!(
+            title_from_content("Setext Title\n=====\n\nbody"),
+            "Setext Title"
+        );
+    }
+
+    #[test]
+    fn title_ignores_heading_inside_code_fence() {
+        let content = "```\n# not a title\n```\n\n# Real Title\n";
+        assert_eq!(title_from_content(content), "Real Title");
+    }
+
+    #[test]
+    fn title_strips_inline_markup_from_heading() {
+        assert_eq!(title_from_content("# Hello **world**\n"), "Hello world");
+    }
+
+    #[test]
+    fn title_uses_first_line_of_leading_paragraph() {
+        assert_eq!(
+            title_from_content("First line\nsecond line\n"),
+            "First line"
+        );
     }
 
     #[test]
