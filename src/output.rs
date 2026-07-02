@@ -15,6 +15,9 @@ pub fn render_note_human(note: &Note) -> String {
     if !note.meta.labels.is_empty() {
         builder.push_record(["labels".to_string(), note.meta.labels.join(", ")]);
     }
+    for (key, value) in &note.meta.extra {
+        builder.push_record([key.clone(), meta_value_display(value)]);
+    }
     let mut table = builder.build();
     table.with(Style::modern());
     format!("{table}\n\n{}", note.content)
@@ -40,6 +43,17 @@ pub fn render_list_json(notes: &[Note]) -> Result<String> {
         .map(|note| Summary { meta: &note.meta })
         .collect();
     Ok(serde_json::to_string_pretty(&summaries)?)
+}
+
+/// Render a flattened frontmatter value (e.g. static `meta`) as a table cell.
+fn meta_value_display(value: &serde_yaml_ng::Value) -> String {
+    match value.as_str() {
+        Some(text) => text.to_string(),
+        None => serde_yaml_ng::to_string(value)
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+    }
 }
 
 #[derive(Serialize)]
@@ -95,5 +109,17 @@ mod tests {
         let text = render_note_human(&note);
         assert!(text.contains("My new note"));
         assert!(text.contains("Hello, World!"));
+    }
+
+    #[test]
+    fn note_human_shows_extra_meta() {
+        let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\nauthor: Paul van der Meijs\n---\n\nBody\n";
+        let note = parse_note(raw).unwrap();
+        let text = render_note_human(&note);
+        assert!(text.contains("author"), "expected author key in:\n{text}");
+        assert!(
+            text.contains("Paul van der Meijs"),
+            "expected author value in:\n{text}"
+        );
     }
 }
