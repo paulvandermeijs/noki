@@ -62,7 +62,7 @@ fn collect_notes(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let path = entry?.path();
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if name == ".git" || name == "README.md" {
+        if name == ".git" {
             continue;
         }
         if path.is_dir() {
@@ -150,10 +150,10 @@ mod tests {
             config.set_str("user.name", "Test").unwrap();
             config.set_str("user.email", "test@example.com").unwrap();
         }
-        std::fs::write(path.join("README.md"), "seed\n").unwrap();
+        std::fs::write(path.join("seed.txt"), "seed\n").unwrap();
         {
             let mut index = repo.index().unwrap();
-            index.add_path(Path::new("README.md")).unwrap();
+            index.add_path(Path::new("seed.txt")).unwrap();
             index.write().unwrap();
             let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
             let sig = Signature::now("Test", "test@example.com").unwrap();
@@ -168,7 +168,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         init_repo_with_commit(dir.path());
         let backend = GitBackend::open_or_clone(dir.path().to_str().unwrap(), dir.path()).unwrap();
-        assert!(backend.list_files().unwrap().is_empty()); // only README.md, no *.md notes yet
+        assert!(backend.list_files().unwrap().is_empty()); // only seed.txt, no *.md notes yet
     }
 
     #[test]
