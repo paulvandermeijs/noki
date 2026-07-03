@@ -33,6 +33,7 @@ repository = "git@github.com:you/notes.git"
 
 [note]
 filename = "%Y/%m/%d/%H:%M:%S-%title"
+daily_filename = "%Y/%m/%d"
 meta = { author = "Your Name" }
 
 [list]
@@ -56,6 +57,16 @@ Set a custom title and attach labels (repeat `--label` for several):
 
 ```sh
 noki --title "Sprint planning" --label work --label meeting
+```
+
+Open or create today's daily note (its path comes from `note.daily_filename`,
+default `%Y/%m/%d`). If today's note already exists it opens pre-filled for you
+to update; otherwise it is created with the title `Daily note for <date>`. Piped
+input is appended to an existing daily note:
+
+```sh
+noki --daily
+echo "Shipped the release" | noki --daily --no-edit
 ```
 
 List notes:
