@@ -12,6 +12,10 @@ pub struct Cli {
     #[arg(short = 'n', long)]
     pub no_edit: bool,
 
+    /// Open or create today's daily note (path from note.daily_filename)
+    #[arg(short = 'd', long)]
+    pub daily: bool,
+
     /// Set the note title (overrides the title derived from the content)
     #[arg(short = 't', long)]
     pub title: Option<String>,
@@ -116,5 +120,18 @@ mod tests {
         let cli = Cli::parse_from(["noki"]);
         assert!(cli.title.is_none());
         assert!(cli.labels.is_empty());
+    }
+
+    #[test]
+    fn parses_daily_flag() {
+        let cli = Cli::parse_from(["noki", "--daily"]);
+        assert!(cli.daily);
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn daily_defaults_to_false() {
+        let cli = Cli::parse_from(["noki"]);
+        assert!(!cli.daily);
     }
 }

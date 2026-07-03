@@ -31,12 +31,24 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             commands::show::run(backend.as_ref(), &path, json, raw)
         }
         Some(Commands::Edit { path }) => commands::edit::run(backend.as_ref(), &path),
-        None => commands::create::run(
-            backend.as_ref(),
-            &config,
-            cli.no_edit,
-            cli.title.as_deref(),
-            &cli.labels,
-        ),
+        None => {
+            if cli.daily {
+                commands::daily::run(
+                    backend.as_ref(),
+                    &config,
+                    cli.no_edit,
+                    cli.title.as_deref(),
+                    &cli.labels,
+                )
+            } else {
+                commands::create::run(
+                    backend.as_ref(),
+                    &config,
+                    cli.no_edit,
+                    cli.title.as_deref(),
+                    &cli.labels,
+                )
+            }
+        }
     }
 }
