@@ -85,7 +85,12 @@ pub(crate) fn build_note(
     let meta = Meta {
         title,
         path: path.clone(),
-        labels: labels.to_vec(),
+        labels: labels
+            .iter()
+            .map(|label| label.trim())
+            .filter(|label| !label.is_empty())
+            .map(str::to_string)
+            .collect(),
         created: now,
         updated: now,
         extra,
@@ -165,6 +170,23 @@ mod tests {
     fn build_note_sets_labels_from_arguments() {
         let config = Config::default();
         let labels = vec!["work".to_string(), "urgent".to_string()];
+        let (_, raw) = build_note("body", &config, None, &labels, now()).unwrap();
+        let note = parse_note(&raw).unwrap();
+        assert_eq!(
+            note.meta.labels,
+            vec!["work".to_string(), "urgent".to_string()]
+        );
+    }
+
+    #[test]
+    fn build_note_trims_and_drops_blank_labels() {
+        let config = Config::default();
+        let labels = vec![
+            "  work  ".to_string(),
+            "".to_string(),
+            "   ".to_string(),
+            "urgent".to_string(),
+        ];
         let (_, raw) = build_note("body", &config, None, &labels, now()).unwrap();
         let note = parse_note(&raw).unwrap();
         assert_eq!(
