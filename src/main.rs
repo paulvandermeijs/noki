@@ -24,7 +24,9 @@ fn run(cli: Cli) -> anyhow::Result<()> {
     let backend = vcs::open_backend(&config)?;
 
     match cli.command {
-        Some(Commands::List { json }) => commands::list::run(backend.as_ref(), json),
+        Some(Commands::List { json }) => {
+            commands::list::run(backend.as_ref(), json, config.max_visible_labels())
+        }
         Some(Commands::Show { path, json, raw }) => {
             commands::show::run(backend.as_ref(), &path, json, raw)
         }

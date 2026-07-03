@@ -1,3 +1,4 @@
+use crate::label::{self, LabelPalette};
 use crate::note::{Meta, Note};
 use anyhow::Result;
 use serde::Serialize;
@@ -28,9 +29,13 @@ pub fn render_note_json(note: &Note) -> Result<String> {
     Ok(serde_json::to_string_pretty(note)?)
 }
 
-/// Render a list of notes as a table (path, title, updated), without content.
-pub fn render_list_human(notes: &[Note]) -> String {
-    let rows: Vec<ListRow> = notes.iter().map(ListRow::from).collect();
+/// Render a list of notes as a table (path, title, labels, updated), without content.
+pub fn render_list_human(notes: &[Note], max_visible_labels: usize) -> String {
+    let mut palette = LabelPalette::new();
+    let rows: Vec<ListRow> = notes
+        .iter()
+        .map(|note| ListRow::from_note(note, max_visible_labels, &mut palette))
+        .collect();
     let mut table = Table::new(rows);
     table.with(Style::modern());
     table.to_string()
@@ -65,14 +70,16 @@ struct Summary<'a> {
 struct ListRow {
     path: String,
     title: String,
+    labels: String,
     updated: String,
 }
 
-impl From<&Note> for ListRow {
-    fn from(note: &Note) -> Self {
+impl ListRow {
+    fn from_note(note: &Note, max_visible_labels: usize, palette: &mut LabelPalette) -> Self {
         ListRow {
             path: note.meta.path.clone(),
             title: note.meta.title.clone(),
+            labels: label::render_labels(&note.meta.labels, max_visible_labels, palette),
             updated: note.meta.updated.to_rfc2822(),
         }
     }
@@ -84,6 +91,23 @@ mod tests {
     use crate::note::parse_note;
 
     const RAW: &str = "---\ntitle: My new note\npath: 2026/06/02/10:00:00-my-new-note.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nHello, World!\n";
+
+    const RAW_LABELS: &str = "---\ntitle: A note\npath: 2026/06/02/a.md\nlabels:\n- feature\n- backend\n- priority\n- ops\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nBody\n";
+
+    #[test]
+    fn list_human_shows_colored_labels_truncated() {
+        let note = parse_note(RAW_LABELS).unwrap();
+        let text = render_list_human(&[note], 3);
+        assert!(
+            text.contains("\x1b["),
+            "expected ANSI color codes in:\n{text}"
+        );
+        assert!(text.contains("feature"), "expected first label in:\n{text}");
+        assert!(
+            text.contains("+1 more"),
+            "expected overflow marker in:\n{text}"
+        );
+    }
 
     #[test]
     fn note_json_has_meta_and_content() {

@@ -5,14 +5,14 @@ use crate::vcs::VersionControl;
 use anyhow::Result;
 
 /// List notes, newest first. Prints a table, or JSON when `json` is set.
-pub fn run(vcs: &dyn VersionControl, json: bool) -> Result<()> {
+pub fn run(vcs: &dyn VersionControl, json: bool, max_visible_labels: usize) -> Result<()> {
     let mut notes = crate::commands::load_notes(vcs)?;
     notes.sort_by_key(|note| Reverse(note.meta.created));
 
     let rendered = if json {
         output::render_list_json(&notes)?
     } else {
-        output::render_list_human(&notes)
+        output::render_list_human(&notes, max_visible_labels)
     };
     println!("{rendered}");
     Ok(())
