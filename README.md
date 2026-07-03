@@ -34,6 +34,8 @@ repository = "git@github.com:you/notes.git"
 [note]
 filename = "%Y/%m/%d/%H:%M:%S-%title"
 daily_filename = "%Y/%m/%d"
+daily_title = "Daily note for %Y-%m-%d"
+daily_label = "daily"
 meta = { author = "Your Name" }
 
 [list]
@@ -61,9 +63,9 @@ noki --title "Sprint planning" --label work --label meeting
 
 Open or create today's daily note (its path comes from `note.daily_filename`,
 default `%Y/%m/%d`). If today's note already exists it opens pre-filled for you
-to update; otherwise it is created with the title `Daily note for <date>`. Piped
-input is appended to an existing daily note. Every daily note is tagged with the
-`daily` label:
+to update; otherwise it is created with a title from `note.daily_title` (default
+`Daily note for %Y-%m-%d`). Piped input is appended to an existing daily note.
+Every daily note is tagged with `note.daily_label` (default `daily`):
 
 ```sh
 noki --daily

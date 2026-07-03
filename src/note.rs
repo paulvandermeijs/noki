@@ -59,6 +59,8 @@ pub fn to_raw(note: &Note) -> Result<String> {
 
 pub const DEFAULT_FILENAME: &str = "%Y/%m/%d/%H:%M:%S-%title";
 pub const DEFAULT_DAILY_FILENAME: &str = "%Y/%m/%d";
+pub const DEFAULT_DAILY_TITLE: &str = "Daily note for %Y-%m-%d";
+pub const DEFAULT_DAILY_LABEL: &str = "daily";
 
 /// Derive a human title from the content: the first heading, else the first
 /// line of the first paragraph, else "untitled".

@@ -24,7 +24,7 @@ pub fn run(
         if no_edit {
             match input {
                 Some(piped) => {
-                    append_and_save(vcs, note, &piped, now)?;
+                    append_and_save(vcs, config, note, &piped, now)?;
                 }
                 None => eprintln!("Nothing to add to today's note."),
             }
@@ -34,7 +34,7 @@ pub fn run(
                 None => note.content.clone(),
             };
             let body = crate::editor::get_content_from_editor(Some(prefill))?;
-            save_update(vcs, note, &body, now)?;
+            save_update(vcs, config, note, &body, now)?;
         }
         return Ok(());
     }
@@ -79,23 +79,25 @@ fn append_body(existing: &str, addition: &str) -> String {
 /// `updated`, preserving `created`/title). Returns the note's path.
 fn append_and_save(
     vcs: &dyn VersionControl,
+    config: &Config,
     note: Note,
     addition: &str,
     now: DateTime<FixedOffset>,
 ) -> Result<Option<String>> {
     let body = append_body(&note.content, addition);
-    save_update(vcs, note, &body, now)
+    save_update(vcs, config, note, &body, now)
 }
 
-/// Save an updated daily note: ensure the `daily` label is present, then write
+/// Save an updated daily note: ensure the daily label is present, then write
 /// via `edit::save_edit` (which refreshes `updated` and preserves `created`).
 fn save_update(
     vcs: &dyn VersionControl,
+    config: &Config,
     mut note: Note,
     body: &str,
     now: DateTime<FixedOffset>,
 ) -> Result<Option<String>> {
-    add_daily_label(&mut note.meta.labels);
+    add_daily_label(&mut note.meta.labels, daily_label(config));
     edit::save_edit(vcs, note, body, now)
 }
 
@@ -121,10 +123,10 @@ fn save_new_daily(
         .map(str::trim)
         .filter(|title| !title.is_empty())
         .map(str::to_string)
-        .unwrap_or_else(|| default_daily_title(now));
+        .unwrap_or_else(|| daily_title(config, now));
 
     let mut labels = labels.to_vec();
-    add_daily_label(&mut labels);
+    add_daily_label(&mut labels, daily_label(config));
     let note = create::assemble_note(path.to_string(), title, content, config, &labels, now);
     let raw = note::to_raw(&note)?;
     vcs.write_file(path, &raw, &format!("Add note {path}"))?;
@@ -132,18 +134,30 @@ fn save_new_daily(
     Ok(Some(path.to_string()))
 }
 
-/// The default title for a new daily note: `Daily note for %Y-%m-%d`.
-fn default_daily_title(now: DateTime<FixedOffset>) -> String {
-    format!("Daily note for {}", now.format("%Y-%m-%d"))
+/// The title for a new daily note, from `note.daily_title` (default
+/// `Daily note for %Y-%m-%d`), rendered as a `chrono` date format.
+fn daily_title(config: &Config, now: DateTime<FixedOffset>) -> String {
+    let template = config
+        .note
+        .daily_title
+        .as_deref()
+        .unwrap_or(note::DEFAULT_DAILY_TITLE);
+    now.format(template).to_string()
 }
 
-/// The label every daily note carries.
-const DAILY_LABEL: &str = "daily";
+/// The label every daily note carries, from `note.daily_label` (default `daily`).
+fn daily_label(config: &Config) -> &str {
+    config
+        .note
+        .daily_label
+        .as_deref()
+        .unwrap_or(note::DEFAULT_DAILY_LABEL)
+}
 
-/// Ensure `DAILY_LABEL` is present in `labels`, without duplicating it.
-fn add_daily_label(labels: &mut Vec<String>) {
-    if !labels.iter().any(|label| label.trim() == DAILY_LABEL) {
-        labels.push(DAILY_LABEL.to_string());
+/// Ensure `label` is present in `labels`, without duplicating it.
+fn add_daily_label(labels: &mut Vec<String>, label: &str) {
+    if !labels.iter().any(|existing| existing.trim() == label) {
+        labels.push(label.to_string());
     }
 }
 
@@ -179,8 +193,29 @@ mod tests {
     }
 
     #[test]
-    fn default_daily_title_formats_the_date() {
-        assert_eq!(default_daily_title(now()), "Daily note for 2026-07-03");
+    fn daily_title_defaults_to_dated_label() {
+        let config = Config::default();
+        assert_eq!(daily_title(&config, now()), "Daily note for 2026-07-03");
+    }
+
+    #[test]
+    fn daily_title_uses_configured_template() {
+        let mut config = Config::default();
+        config.note.daily_title = Some("Journal for %d %B %Y".to_string());
+        assert_eq!(daily_title(&config, now()), "Journal for 03 July 2026");
+    }
+
+    #[test]
+    fn daily_label_defaults_to_daily() {
+        let config = Config::default();
+        assert_eq!(daily_label(&config), "daily");
+    }
+
+    #[test]
+    fn daily_label_uses_configured_value() {
+        let mut config = Config::default();
+        config.note.daily_label = Some("journal".to_string());
+        assert_eq!(daily_label(&config), "journal");
     }
 
     #[test]
@@ -344,8 +379,9 @@ mod tests {
     #[test]
     fn append_and_save_appends_and_bumps_updated() {
         let backend = MemoryBackend::with_files(&[("2026/07/03.md", EXISTING)]);
+        let config = Config::default();
         let note = parse_note(EXISTING).unwrap();
-        let path = append_and_save(&backend, note, "did X", now())
+        let path = append_and_save(&backend, &config, note, "did X", now())
             .unwrap()
             .unwrap();
         assert_eq!(path, "2026/07/03.md");
