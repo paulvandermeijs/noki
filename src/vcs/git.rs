@@ -159,10 +159,18 @@ fn rebase_onto_origin(repo: &git2::Repository, branch: &str) -> Result<()> {
         Ok(())
     })();
 
-    if result.is_err() {
-        let _ = rebase.abort(); // restore HEAD; the local commit is preserved
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            // restore HEAD; the local commit is preserved
+            if let Err(abort_error) = rebase.abort() {
+                anyhow::bail!(
+                    "Rebase failed ({error:#}) and could not be aborted ({abort_error:#}); repository left mid-rebase"
+                );
+            }
+            Err(error)
+        }
     }
-    result
 }
 
 fn sync_and_push(repo: &git2::Repository) -> Result<()> {
@@ -170,10 +178,13 @@ fn sync_and_push(repo: &git2::Repository) -> Result<()> {
         Ok(remote) => remote,
         Err(_) => return Ok(()), // no remote: local-only repository
     };
-    let branch = repo
-        .head()?
+    let head = repo.head()?;
+    if !head.is_branch() {
+        anyhow::bail!("Cannot push from a detached HEAD");
+    }
+    let branch = head
         .shorthand()
-        .context("Cannot push from a detached HEAD")?
+        .context("Cannot determine the current branch name")?
         .to_string();
 
     fetch_origin(repo, &mut remote)?;
@@ -343,6 +354,22 @@ mod tests {
                 .unwrap()
                 .parent_count(),
             1
+        );
+    }
+
+    #[test]
+    fn sync_and_push_rejects_detached_head() {
+        let (_origin_dir, _seed_dir, seed) = origin_with_seed();
+
+        // Detach HEAD from the branch, landing directly on the current commit.
+        let head_oid = seed.head().unwrap().peel_to_commit().unwrap().id();
+        seed.set_head_detached(head_oid).unwrap();
+        assert!(!seed.head().unwrap().is_branch());
+
+        let error = sync_and_push(&seed).unwrap_err();
+        assert!(
+            error.to_string().contains("detached HEAD"),
+            "unexpected error: {error:#}"
         );
     }
 }
