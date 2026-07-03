@@ -34,7 +34,7 @@ pub fn run(
                 None => note.content.clone(),
             };
             let body = crate::editor::get_content_from_editor(Some(prefill))?;
-            edit::save_edit(vcs, note, &body, now)?;
+            save_update(vcs, note, &body, now)?;
         }
         return Ok(());
     }
@@ -76,7 +76,7 @@ fn append_body(existing: &str, addition: &str) -> String {
 }
 
 /// Append `addition` to an existing daily note and save it (refreshing
-/// `updated`, preserving `created`/title/labels). Returns the note's path.
+/// `updated`, preserving `created`/title). Returns the note's path.
 fn append_and_save(
     vcs: &dyn VersionControl,
     note: Note,
@@ -84,7 +84,19 @@ fn append_and_save(
     now: DateTime<FixedOffset>,
 ) -> Result<Option<String>> {
     let body = append_body(&note.content, addition);
-    edit::save_edit(vcs, note, &body, now)
+    save_update(vcs, note, &body, now)
+}
+
+/// Save an updated daily note: ensure the `daily` label is present, then write
+/// via `edit::save_edit` (which refreshes `updated` and preserves `created`).
+fn save_update(
+    vcs: &dyn VersionControl,
+    mut note: Note,
+    body: &str,
+    now: DateTime<FixedOffset>,
+) -> Result<Option<String>> {
+    add_daily_label(&mut note.meta.labels);
+    edit::save_edit(vcs, note, body, now)
 }
 
 /// Build and store a brand-new daily note at `path`, committing it as an "Add".
@@ -111,7 +123,9 @@ fn save_new_daily(
         .map(str::to_string)
         .unwrap_or_else(|| default_daily_title(now));
 
-    let note = create::assemble_note(path.to_string(), title, content, config, labels, now);
+    let mut labels = labels.to_vec();
+    add_daily_label(&mut labels);
+    let note = create::assemble_note(path.to_string(), title, content, config, &labels, now);
     let raw = note::to_raw(&note)?;
     vcs.write_file(path, &raw, &format!("Add note {path}"))?;
     println!("{path}");
@@ -121,6 +135,16 @@ fn save_new_daily(
 /// The default title for a new daily note: `Daily note for %Y-%m-%d`.
 fn default_daily_title(now: DateTime<FixedOffset>) -> String {
     format!("Daily note for {}", now.format("%Y-%m-%d"))
+}
+
+/// The label every daily note carries.
+const DAILY_LABEL: &str = "daily";
+
+/// Ensure `DAILY_LABEL` is present in `labels`, without duplicating it.
+fn add_daily_label(labels: &mut Vec<String>) {
+    if !labels.iter().any(|label| label.trim() == DAILY_LABEL) {
+        labels.push(DAILY_LABEL.to_string());
+    }
 }
 
 #[cfg(test)]
@@ -269,11 +293,52 @@ mod tests {
         .unwrap()
         .unwrap();
         let saved = parse_note(&backend.read_file("2026/07/03.md").unwrap()).unwrap();
-        assert_eq!(saved.meta.labels, vec!["work".to_string()]);
+        assert_eq!(
+            saved.meta.labels,
+            vec!["work".to_string(), "daily".to_string()]
+        );
         assert_eq!(
             saved.meta.extra.get("author"),
             Some(&serde_yaml_ng::to_value("Paul").unwrap())
         );
+    }
+
+    #[test]
+    fn save_new_daily_adds_the_daily_label() {
+        let backend = MemoryBackend::new();
+        let config = Config::default();
+        save_new_daily(
+            &backend,
+            &config,
+            "2026/07/03.md",
+            "Hello",
+            None,
+            &[],
+            now(),
+        )
+        .unwrap()
+        .unwrap();
+        let saved = parse_note(&backend.read_file("2026/07/03.md").unwrap()).unwrap();
+        assert_eq!(saved.meta.labels, vec!["daily".to_string()]);
+    }
+
+    #[test]
+    fn save_new_daily_does_not_duplicate_the_daily_label() {
+        let backend = MemoryBackend::new();
+        let config = Config::default();
+        save_new_daily(
+            &backend,
+            &config,
+            "2026/07/03.md",
+            "Hello",
+            None,
+            &["daily".to_string()],
+            now(),
+        )
+        .unwrap()
+        .unwrap();
+        let saved = parse_note(&backend.read_file("2026/07/03.md").unwrap()).unwrap();
+        assert_eq!(saved.meta.labels, vec!["daily".to_string()]);
     }
 
     #[test]
@@ -289,5 +354,6 @@ mod tests {
         assert_eq!(saved.meta.updated, now());
         assert_eq!(saved.meta.created, at("2026-07-03T08:00:00+02:00"));
         assert_eq!(saved.meta.title, "Daily note for 2026-07-03");
+        assert_eq!(saved.meta.labels, vec!["daily".to_string()]);
     }
 }
