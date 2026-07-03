@@ -3,6 +3,7 @@ pub mod commands;
 pub mod config;
 pub mod editor;
 pub mod io;
+pub mod label;
 pub mod note;
 pub mod output;
 pub mod vcs;
