@@ -35,6 +35,17 @@ pub fn create_label_color(index: usize) -> LabelColor {
     }
 }
 
+/// Render one label as an ANSI-colored chip with a space of padding on each
+/// side of the text, ending with a reset.
+pub fn render_label(label: &str, color: LabelColor) -> String {
+    let fg = color.foreground;
+    let bg = color.background;
+    format!(
+        "\x1b[38;2;{};{};{}m\x1b[48;2;{};{};{}m {label} \x1b[0m",
+        fg.r, fg.g, fg.b, bg.r, bg.g, bg.b
+    )
+}
+
 /// Convert an HSL color (hue in degrees `[0, 360)`, saturation and lightness in
 /// `[0, 1]`) to 24-bit RGB.
 fn hsl_to_rgb(hue: f64, saturation: f64, lightness: f64) -> Rgb {
@@ -103,5 +114,35 @@ mod tests {
             brightness(color.foreground) < brightness(color.background),
             "expected a darker foreground on a light chip"
         );
+    }
+
+    #[test]
+    fn render_label_wraps_padded_text_in_color_codes() {
+        let color = LabelColor {
+            background: Rgb {
+                r: 10,
+                g: 20,
+                b: 30,
+            },
+            foreground: Rgb {
+                r: 200,
+                g: 210,
+                b: 220,
+            },
+        };
+        let chip = render_label("feature", color);
+        assert!(
+            chip.contains(" feature "),
+            "expected padded text in: {chip:?}"
+        );
+        assert!(
+            chip.contains("\x1b[48;2;10;20;30m"),
+            "missing background: {chip:?}"
+        );
+        assert!(
+            chip.contains("\x1b[38;2;200;210;220m"),
+            "missing foreground: {chip:?}"
+        );
+        assert!(chip.ends_with("\x1b[0m"), "missing reset: {chip:?}");
     }
 }
