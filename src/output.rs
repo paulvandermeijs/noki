@@ -3,7 +3,9 @@ use crate::note::{Meta, Note};
 use anyhow::Result;
 use serde::Serialize;
 use tabled::builder::Builder;
-use tabled::settings::Style;
+use tabled::settings::object::{Columns, Rows};
+use tabled::settings::style::{HorizontalLine, VerticalLine};
+use tabled::settings::{Color, Modify, Style};
 use tabled::{Table, Tabled};
 
 /// Render a single note as a metadata table followed by its content. `color`
@@ -23,7 +25,7 @@ pub fn render_note_human(note: &Note, color: bool) -> String {
         builder.push_record([key.clone(), meta_value_display(value)]);
     }
     let mut table = builder.build();
-    table.with(Style::modern());
+    apply_meta_style(&mut table, color);
     format!("{table}\n\n{}", note.content)
 }
 
@@ -42,7 +44,7 @@ pub fn render_list_human(notes: &[Note], max_visible_labels: usize, color: bool)
         .map(|note| ListRow::from_note(note, max_visible_labels, &mut palette, color))
         .collect();
     let mut table = Table::new(rows);
-    table.with(Style::modern());
+    apply_list_style(&mut table, color);
     table.to_string()
 }
 
@@ -53,6 +55,37 @@ pub fn render_list_json(notes: &[Note]) -> Result<String> {
         .map(|note| Summary { meta: &note.meta })
         .collect();
     Ok(serde_json::to_string_pretty(&summaries)?)
+}
+
+/// Style the list table: modern borders, a double-line rule separating the
+/// header row from the body, and (when `color`) a bold header row. The rule
+/// uses single-vertical/double-horizontal junctions (`╞ ╪ ╡`) so it joins the
+/// surrounding single-line borders flush instead of leaving a seam.
+fn apply_list_style(table: &mut Table, color: bool) {
+    let header_rule = HorizontalLine::inherit(Style::extended())
+        .left('╞')
+        .right('╡')
+        .intersection('╪');
+    table.with(Style::modern().horizontals([(1, header_rule)]));
+    if color {
+        table.with(Modify::new(Rows::first()).with(Color::BOLD));
+    }
+}
+
+/// Style the metadata table: modern borders with a double-line rule separating
+/// the header column (keys) from the values, and (when `color`) bold keys. The
+/// divider uses double-vertical/single-horizontal junctions (`╥` top, `╫`
+/// crossings, `╨` bottom) so it joins the surrounding single-line borders flush
+/// instead of leaving a seam.
+fn apply_meta_style(table: &mut Table, color: bool) {
+    let divider = VerticalLine::inherit(Style::extended())
+        .top('╥')
+        .bottom('╨')
+        .intersection('╫');
+    table.with(Style::modern().verticals([(1, divider)]));
+    if color {
+        table.with(Modify::new(Columns::first()).with(Color::BOLD));
+    }
 }
 
 /// Render a flattened frontmatter value (e.g. static `meta`) as a table cell.
@@ -128,6 +161,26 @@ mod tests {
         assert!(
             text.contains("+1 more"),
             "expected overflow marker in:\n{text}"
+        );
+    }
+
+    #[test]
+    fn list_human_bold_headers_when_color() {
+        let note = parse_note(RAW).unwrap();
+        let text = render_list_human(&[note], 3, true);
+        assert!(
+            text.contains("\x1b[1m"),
+            "expected bold header ANSI in:\n{text}"
+        );
+    }
+
+    #[test]
+    fn note_human_bold_header_column_when_color() {
+        let note = parse_note(RAW).unwrap();
+        let text = render_note_human(&note, true);
+        assert!(
+            text.contains("\x1b[1m"),
+            "expected bold header-column ANSI in:\n{text}"
         );
     }
 
