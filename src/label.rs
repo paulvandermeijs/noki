@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 /// A 24-bit RGB color.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Rgb {
@@ -44,6 +46,32 @@ pub fn render_label(label: &str, color: LabelColor) -> String {
         "\x1b[38;2;{};{};{}m\x1b[48;2;{};{};{}m {label} \x1b[0m",
         fg.r, fg.g, fg.b, bg.r, bg.g, bg.b
     )
+}
+
+/// Remembers which color each distinct label was assigned during a single
+/// render, so a repeated label keeps its color. Never persisted between runs.
+#[derive(Default)]
+pub struct LabelPalette {
+    assigned: HashMap<String, LabelColor>,
+    next_index: usize,
+}
+
+impl LabelPalette {
+    /// A palette with no assignments yet.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The color for `label`, assigning the next sequential color on first sight.
+    pub fn color_for(&mut self, label: &str) -> LabelColor {
+        if let Some(color) = self.assigned.get(label) {
+            return *color;
+        }
+        let color = create_label_color(self.next_index);
+        self.next_index += 1;
+        self.assigned.insert(label.to_string(), color);
+        color
+    }
 }
 
 /// Convert an HSL color (hue in degrees `[0, 360)`, saturation and lightness in
@@ -144,5 +172,22 @@ mod tests {
             "missing foreground: {chip:?}"
         );
         assert!(chip.ends_with("\x1b[0m"), "missing reset: {chip:?}");
+    }
+
+    #[test]
+    fn palette_reuses_color_for_repeated_label() {
+        let mut palette = LabelPalette::new();
+        let first = palette.color_for("backend");
+        let _other = palette.color_for("frontend");
+        let again = palette.color_for("backend");
+        assert_eq!(first, again);
+    }
+
+    #[test]
+    fn palette_assigns_colors_in_first_seen_order() {
+        let mut palette = LabelPalette::new();
+        assert_eq!(palette.color_for("a"), create_label_color(0));
+        assert_eq!(palette.color_for("b"), create_label_color(1));
+        assert_eq!(palette.color_for("a"), create_label_color(0));
     }
 }
