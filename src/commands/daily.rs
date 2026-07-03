@@ -59,12 +59,15 @@ fn daily_path(config: &Config, now: DateTime<FixedOffset>) -> String {
     note::note_path(template, "", now)
 }
 
-/// Load and parse the note at `path`, or `None` if there is none there.
+/// Load and parse the note at `path`, or `None` if there is none there. A read
+/// or parse failure on a note that *is* present propagates as an error rather
+/// than being treated as "missing" (which would clobber it on the create path).
 fn load_existing(vcs: &dyn VersionControl, path: &str) -> Result<Option<Note>> {
-    match vcs.read_file(path) {
-        Ok(raw) => Ok(Some(note::parse_note(&raw)?)),
-        Err(_) => Ok(None),
+    if !vcs.list_files()?.iter().any(|listed| listed == path) {
+        return Ok(None);
     }
+    let raw = vcs.read_file(path)?;
+    Ok(Some(note::parse_note(&raw)?))
 }
 
 /// Append `addition` below `existing`, separated by a blank line.
@@ -176,6 +179,12 @@ mod tests {
         let note = load_existing(&backend, "2026/07/03.md").unwrap().unwrap();
         assert_eq!(note.meta.title, "Daily note for 2026-07-03");
         assert_eq!(note.content, "Morning notes\n");
+    }
+
+    #[test]
+    fn load_existing_propagates_parse_errors() {
+        let backend = MemoryBackend::with_files(&[("2026/07/03.md", "no frontmatter here")]);
+        assert!(load_existing(&backend, "2026/07/03.md").is_err());
     }
 
     #[test]
