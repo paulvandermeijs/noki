@@ -6,7 +6,13 @@ use chrono::{DateTime, FixedOffset, Local};
 use std::collections::BTreeMap;
 
 /// Capture note content (from stdin and/or the editor) and store it.
-pub fn run(vcs: &dyn VersionControl, config: &Config, no_edit: bool) -> Result<()> {
+pub fn run(
+    vcs: &dyn VersionControl,
+    config: &Config,
+    no_edit: bool,
+    title: Option<&str>,
+    labels: &[String],
+) -> Result<()> {
     let input = crate::io::read_stdin();
     let content = if no_edit {
         input.unwrap_or_default()
@@ -15,7 +21,7 @@ pub fn run(vcs: &dyn VersionControl, config: &Config, no_edit: bool) -> Result<(
     };
 
     let now = Local::now().fixed_offset();
-    save_note(vcs, config, &content, now)?;
+    save_note(vcs, config, &content, title, labels, now)?;
     Ok(())
 }
 
@@ -23,9 +29,11 @@ pub(crate) fn save_note(
     vcs: &dyn VersionControl,
     config: &Config,
     content: &str,
+    title: Option<&str>,
+    labels: &[String],
     now: DateTime<FixedOffset>,
 ) -> Result<Option<String>> {
-    match build_note(content, config, now) {
+    match build_note(content, config, title, labels, now) {
         None => {
             eprintln!("Skipping empty note.");
             Ok(None)
@@ -43,6 +51,8 @@ const RESERVED_META_KEYS: [&str; 5] = ["title", "path", "labels", "created", "up
 pub(crate) fn build_note(
     content: &str,
     config: &Config,
+    title: Option<&str>,
+    labels: &[String],
     now: DateTime<FixedOffset>,
 ) -> Option<(String, String)> {
     let content = content.trim();
@@ -50,7 +60,11 @@ pub(crate) fn build_note(
         return None;
     }
 
-    let title = note::title_from_content(content);
+    let title = title
+        .map(str::trim)
+        .filter(|title| !title.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| note::title_from_content(content));
     let template = config
         .note
         .filename
@@ -71,7 +85,7 @@ pub(crate) fn build_note(
     let meta = Meta {
         title,
         path: path.clone(),
-        labels: Vec::new(),
+        labels: labels.to_vec(),
         created: now,
         updated: now,
         extra,
@@ -100,13 +114,14 @@ mod tests {
     #[test]
     fn build_note_returns_none_for_empty_content() {
         let config = Config::default();
-        assert!(build_note("   \n", &config, now()).is_none());
+        assert!(build_note("   \n", &config, None, &[], now()).is_none());
     }
 
     #[test]
     fn build_note_produces_path_and_frontmatter() {
         let config = Config::default();
-        let (path, raw) = build_note("# My new note\n\nHello, World!", &config, now()).unwrap();
+        let (path, raw) =
+            build_note("# My new note\n\nHello, World!", &config, None, &[], now()).unwrap();
         assert_eq!(path, "2026/06/02/10:00:00-my-new-note.md");
         let note = parse_note(&raw).unwrap();
         assert_eq!(note.meta.title, "My new note");
@@ -114,10 +129,55 @@ mod tests {
     }
 
     #[test]
+    fn build_note_uses_custom_title_over_content() {
+        let config = Config::default();
+        let (path, raw) = build_note(
+            "# Content Heading\n\nbody",
+            &config,
+            Some("Custom Title"),
+            &[],
+            now(),
+        )
+        .unwrap();
+        assert_eq!(path, "2026/06/02/10:00:00-custom-title.md");
+        let note = parse_note(&raw).unwrap();
+        assert_eq!(note.meta.title, "Custom Title");
+    }
+
+    #[test]
+    fn build_note_falls_back_to_content_title_when_none() {
+        let config = Config::default();
+        let (_, raw) = build_note("# Real Title\n\nbody", &config, None, &[], now()).unwrap();
+        let note = parse_note(&raw).unwrap();
+        assert_eq!(note.meta.title, "Real Title");
+    }
+
+    #[test]
+    fn build_note_falls_back_when_title_is_blank() {
+        let config = Config::default();
+        let (_, raw) =
+            build_note("# Real Title\n\nbody", &config, Some("   "), &[], now()).unwrap();
+        let note = parse_note(&raw).unwrap();
+        assert_eq!(note.meta.title, "Real Title");
+    }
+
+    #[test]
+    fn build_note_sets_labels_from_arguments() {
+        let config = Config::default();
+        let labels = vec!["work".to_string(), "urgent".to_string()];
+        let (_, raw) = build_note("body", &config, None, &labels, now()).unwrap();
+        let note = parse_note(&raw).unwrap();
+        assert_eq!(
+            note.meta.labels,
+            vec!["work".to_string(), "urgent".to_string()]
+        );
+    }
+
+    #[test]
     fn save_note_writes_to_backend() {
         let config = Config::default();
         let backend = MemoryBackend::new();
-        let path = save_note(&backend, &config, "Hello", now())
+        let path = save_note(&backend, &config, "Hello", None, &[], now())
             .unwrap()
             .unwrap();
         let raw = backend.read_file(&path).unwrap();
@@ -128,7 +188,11 @@ mod tests {
     fn save_note_skips_empty_content() {
         let config = Config::default();
         let backend = MemoryBackend::new();
-        assert!(save_note(&backend, &config, "  ", now()).unwrap().is_none());
+        assert!(
+            save_note(&backend, &config, "  ", None, &[], now())
+                .unwrap()
+                .is_none()
+        );
         assert!(backend.list_files().unwrap().is_empty());
     }
 
@@ -144,7 +208,7 @@ mod tests {
             toml::Value::String("hacked".to_string()),
         );
 
-        let (_, raw) = build_note("# Real Title\n\nbody", &config, now()).unwrap();
+        let (_, raw) = build_note("# Real Title\n\nbody", &config, None, &[], now()).unwrap();
         let note = crate::note::parse_note(&raw).unwrap();
 
         assert_eq!(note.meta.title, "Real Title");

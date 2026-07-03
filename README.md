@@ -48,6 +48,12 @@ Capture piped input without opening the editor:
 echo "A quick note" | noki --no-edit
 ```
 
+Set a custom title and attach labels (repeat `--label` for several):
+
+```sh
+noki --title "Sprint planning" --label work --label meeting
+```
+
 List notes:
 
 ```sh

@@ -28,6 +28,12 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Some(Commands::Show { path, json, raw }) => {
             commands::show::run(backend.as_ref(), &path, json, raw)
         }
-        None => commands::create::run(backend.as_ref(), &config, cli.no_edit),
+        None => commands::create::run(
+            backend.as_ref(),
+            &config,
+            cli.no_edit,
+            cli.title.as_deref(),
+            &cli.labels,
+        ),
     }
 }
