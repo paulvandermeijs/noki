@@ -4,12 +4,14 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 const LOCAL_CONFIG_NAME: &str = ".noki.toml";
+const DEFAULT_MAX_VISIBLE_LABELS: usize = 3;
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub repository: Option<String>,
     pub note: NoteConfig,
+    pub list: ListConfig,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -19,12 +21,25 @@ pub struct NoteConfig {
     pub meta: BTreeMap<String, toml::Value>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct ListConfig {
+    pub max_visible_labels: Option<usize>,
+}
+
 impl Config {
     /// The resolved repository, or an error if none was configured.
     pub fn repository(&self) -> Result<&str> {
         self.repository
             .as_deref()
             .context("No repository configured. Set one with --repository or in .noki.toml.")
+    }
+
+    /// The maximum number of labels to show per note in the list.
+    pub fn max_visible_labels(&self) -> usize {
+        self.list
+            .max_visible_labels
+            .unwrap_or(DEFAULT_MAX_VISIBLE_LABELS)
     }
 }
 
@@ -88,6 +103,9 @@ impl Config {
         for (key, value) in other.note.meta {
             self.note.meta.insert(key, value);
         }
+        if other.list.max_visible_labels.is_some() {
+            self.list.max_visible_labels = other.list.max_visible_labels;
+        }
     }
 }
 
@@ -144,5 +162,24 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let config = load_from(None, dir.path(), None).unwrap();
         assert!(config.repository().is_err());
+    }
+
+    #[test]
+    fn parses_list_section() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(".noki.toml"),
+            "repository = \"r\"\n\n[list]\nmax_visible_labels = 5\n",
+        )
+        .unwrap();
+        let config = load_from(None, dir.path(), None).unwrap();
+        assert_eq!(config.max_visible_labels(), 5);
+    }
+
+    #[test]
+    fn max_visible_labels_defaults_to_three() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = load_from(None, dir.path(), None).unwrap();
+        assert_eq!(config.max_visible_labels(), 3);
     }
 }
