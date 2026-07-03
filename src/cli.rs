@@ -48,6 +48,11 @@ pub enum Commands {
         #[arg(long)]
         raw: bool,
     },
+    /// Edit an existing note in your editor
+    Edit {
+        /// The repository-relative path of the note
+        path: String,
+    },
 }
 
 #[cfg(test)]
@@ -71,6 +76,15 @@ mod tests {
                 assert!(!raw);
             }
             _ => panic!("expected show"),
+        }
+    }
+
+    #[test]
+    fn parses_edit_command() {
+        let cli = Cli::parse_from(["noki", "edit", "a/b.md"]);
+        match cli.command {
+            Some(Commands::Edit { path }) => assert_eq!(path, "a/b.md"),
+            _ => panic!("expected edit"),
         }
     }
 

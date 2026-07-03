@@ -30,6 +30,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Some(Commands::Show { path, json, raw }) => {
             commands::show::run(backend.as_ref(), &path, json, raw)
         }
+        Some(Commands::Edit { path }) => commands::edit::run(backend.as_ref(), &path),
         None => commands::create::run(
             backend.as_ref(),
             &config,
