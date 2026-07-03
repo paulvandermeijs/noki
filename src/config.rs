@@ -18,6 +18,7 @@ pub struct Config {
 #[serde(default)]
 pub struct NoteConfig {
     pub filename: Option<String>,
+    pub daily_filename: Option<String>,
     pub meta: BTreeMap<String, toml::Value>,
 }
 
@@ -100,6 +101,9 @@ impl Config {
         if other.note.filename.is_some() {
             self.note.filename = other.note.filename;
         }
+        if other.note.daily_filename.is_some() {
+            self.note.daily_filename = other.note.daily_filename;
+        }
         for (key, value) in other.note.meta {
             self.note.meta.insert(key, value);
         }
@@ -181,5 +185,20 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let config = load_from(None, dir.path(), None).unwrap();
         assert_eq!(config.max_visible_labels(), 3);
+    }
+
+    #[test]
+    fn parses_daily_filename() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(".noki.toml"),
+            "repository = \"r\"\n\n[note]\ndaily_filename = \"journal/%Y-%m-%d\"\n",
+        )
+        .unwrap();
+        let config = load_from(None, dir.path(), None).unwrap();
+        assert_eq!(
+            config.note.daily_filename.as_deref(),
+            Some("journal/%Y-%m-%d")
+        );
     }
 }

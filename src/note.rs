@@ -58,6 +58,7 @@ pub fn to_raw(note: &Note) -> Result<String> {
 }
 
 pub const DEFAULT_FILENAME: &str = "%Y/%m/%d/%H:%M:%S-%title";
+pub const DEFAULT_DAILY_FILENAME: &str = "%Y/%m/%d";
 
 /// Derive a human title from the content: the first heading, else the first
 /// line of the first paragraph, else "untitled".
@@ -281,5 +282,12 @@ mod tests {
         let note = parse_note(raw).unwrap();
         assert_eq!(note.meta.title, "T");
         assert_eq!(note.content, "");
+    }
+
+    #[test]
+    fn note_path_daily_template_has_no_title() {
+        let when = at("2026-07-03T09:00:00+02:00");
+        let path = note_path(DEFAULT_DAILY_FILENAME, "", when);
+        assert_eq!(path, "2026/07/03.md");
     }
 }
