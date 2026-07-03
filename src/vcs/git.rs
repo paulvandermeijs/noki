@@ -100,26 +100,14 @@ fn commit_and_push(workdir: &Path, path: &str, message: &str) -> Result<()> {
         &parents,
     )?;
 
-    // The commit is safe on disk; a failed push must not lose the note.
-    if let Err(error) = push(&repo) {
+    // The commit is safe on disk; a failed fetch/rebase/push must not lose the note.
+    if let Err(error) = sync_and_push(&repo) {
         eprintln!("Warning: committed locally but failed to push to origin: {error:#}");
     }
     Ok(())
 }
 
-fn push(repo: &git2::Repository) -> Result<()> {
-    let mut remote = match repo.find_remote("origin") {
-        Ok(remote) => remote,
-        Err(_) => return Ok(()), // no remote: local-only repository
-    };
-    let branch = repo
-        .head()?
-        .shorthand()
-        .context("Cannot push from a detached HEAD")?
-        .to_string();
-    let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
-
-    let config = repo.config()?;
+fn remote_callbacks(config: git2::Config) -> git2::RemoteCallbacks<'static> {
     let mut callbacks = git2::RemoteCallbacks::new();
     callbacks.credentials(move |url, username, allowed| {
         if allowed.contains(git2::CredentialType::SSH_KEY) {
@@ -130,8 +118,73 @@ fn push(repo: &git2::Repository) -> Result<()> {
             git2::Cred::default()
         }
     });
+    callbacks
+}
+
+fn fetch_origin(repo: &git2::Repository, remote: &mut git2::Remote) -> Result<()> {
+    let mut options = git2::FetchOptions::new();
+    options.remote_callbacks(remote_callbacks(repo.config()?));
+    // Empty refspec list uses origin's configured fetch refspecs, updating refs/remotes/origin/*.
+    let refspecs: [&str; 0] = [];
+    remote
+        .fetch(&refspecs, Some(&mut options), None)
+        .context("Failed to fetch from origin")
+}
+
+fn rebase_onto_origin(repo: &git2::Repository, branch: &str) -> Result<()> {
+    let upstream_ref = format!("refs/remotes/origin/{branch}");
+    let upstream = match repo.find_reference(&upstream_ref) {
+        Ok(reference) => reference.peel_to_commit()?,
+        Err(_) => return Ok(()), // origin has no matching branch yet: nothing to rebase onto
+    };
+    let local = repo.head()?.peel_to_commit()?;
+    // If local already contains upstream, a plain push fast-forwards; no rebase needed.
+    if local.id() == upstream.id() || repo.graph_descendant_of(local.id(), upstream.id())? {
+        return Ok(());
+    }
+
+    let onto = repo.find_annotated_commit(upstream.id())?;
+    let signature = repo.signature()?;
+    let mut rebase = repo.rebase(None, Some(&onto), None, None)?;
+
+    let result = (|| -> Result<()> {
+        while let Some(operation) = rebase.next() {
+            operation.context("Rebase step failed")?;
+            if repo.index()?.has_conflicts() {
+                anyhow::bail!("Rebase conflict while integrating origin changes");
+            }
+            rebase.commit(None, &signature, None)?;
+        }
+        rebase.finish(Some(&signature))?;
+        Ok(())
+    })();
+
+    if result.is_err() {
+        let _ = rebase.abort(); // restore HEAD; the local commit is preserved
+    }
+    result
+}
+
+fn sync_and_push(repo: &git2::Repository) -> Result<()> {
+    let mut remote = match repo.find_remote("origin") {
+        Ok(remote) => remote,
+        Err(_) => return Ok(()), // no remote: local-only repository
+    };
+    let branch = repo
+        .head()?
+        .shorthand()
+        .context("Cannot push from a detached HEAD")?
+        .to_string();
+
+    fetch_origin(repo, &mut remote)?;
+    rebase_onto_origin(repo, &branch)?;
+    push(repo, &mut remote, &branch)
+}
+
+fn push(repo: &git2::Repository, remote: &mut git2::Remote, branch: &str) -> Result<()> {
+    let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
     let mut options = git2::PushOptions::new();
-    options.remote_callbacks(callbacks);
+    options.remote_callbacks(remote_callbacks(repo.config()?));
     remote
         .push(&[refspec.as_str()], Some(&mut options))
         .context("Failed to push to origin")
@@ -161,6 +214,56 @@ mod tests {
                 .unwrap();
         }
         repo
+    }
+
+    // Commit `contents` to `name` in `repo`'s working tree, on top of the current HEAD.
+    fn commit_file(repo: &Repository, name: &str, contents: &str, message: &str) -> git2::Oid {
+        let workdir = repo.workdir().unwrap();
+        let full = workdir.join(name);
+        if let Some(parent) = full.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&full, contents).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(name)).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = Signature::now("Test", "test@example.com").unwrap();
+        let head = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
+        let parents: Vec<&git2::Commit> = head.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents)
+            .unwrap()
+    }
+
+    fn set_identity(repo: &Repository) {
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test").unwrap();
+        config.set_str("user.email", "test@example.com").unwrap();
+    }
+
+    // Push `master` to the repo's `origin` (a local bare path needs no credentials).
+    fn push_master(repo: &Repository) {
+        let mut remote = repo.find_remote("origin").unwrap();
+        remote
+            .push(&["refs/heads/master:refs/heads/master"], None)
+            .unwrap();
+    }
+
+    // A bare `origin` seeded with one commit, plus a working "seed" clone wired to it.
+    // Returns (origin tempdir, seed tempdir, seed repo). Both tempdirs must stay alive.
+    fn origin_with_seed() -> (tempfile::TempDir, tempfile::TempDir, Repository) {
+        let origin_dir = tempfile::tempdir().unwrap();
+        Repository::init_bare(origin_dir.path()).unwrap();
+        let origin_url = origin_dir.path().to_str().unwrap();
+
+        let seed_dir = tempfile::tempdir().unwrap();
+        let seed = Repository::init(seed_dir.path()).unwrap();
+        set_identity(&seed);
+        commit_file(&seed, "seed.txt", "seed\n", "initial");
+        seed.remote("origin", origin_url).unwrap();
+        push_master(&seed);
+
+        (origin_dir, seed_dir, seed)
     }
 
     #[test]
@@ -197,5 +300,49 @@ mod tests {
             .unwrap()
             .to_string();
         assert_eq!(head_msg, "Add note");
+    }
+
+    #[test]
+    fn push_rebases_onto_diverged_origin() {
+        let (origin_dir, _seed_dir, seed) = origin_with_seed();
+        let origin_url = origin_dir.path().to_str().unwrap();
+
+        // noki's private clone of origin.
+        let workdir = tempfile::tempdir().unwrap();
+        let noki = Repository::clone(origin_url, workdir.path()).unwrap();
+        set_identity(&noki);
+
+        // Someone advances origin behind noki's back (e.g. a wiki edit via the web UI).
+        commit_file(&seed, "other.txt", "web edit\n", "unrelated remote change");
+        push_master(&seed);
+
+        // noki captures a note; it must fetch, rebase onto origin, and push.
+        let backend = GitBackend {
+            workdir: workdir.path().to_path_buf(),
+        };
+        backend
+            .write_file("note.md", "hello\n", "Add note")
+            .unwrap();
+
+        // Origin now contains BOTH the note and the unrelated remote change.
+        let origin_repo = Repository::open_bare(origin_dir.path()).unwrap();
+        let tree = origin_repo.head().unwrap().peel_to_tree().unwrap();
+        assert!(tree.get_path(Path::new("note.md")).is_ok(), "note pushed");
+        assert!(
+            tree.get_path(Path::new("other.txt")).is_ok(),
+            "remote change preserved"
+        );
+
+        // History is linear: the note commit has exactly one parent (the remote change).
+        let local = Repository::open(workdir.path()).unwrap();
+        assert_eq!(
+            local
+                .head()
+                .unwrap()
+                .peel_to_commit()
+                .unwrap()
+                .parent_count(),
+            1
+        );
     }
 }
