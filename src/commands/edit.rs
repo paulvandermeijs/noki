@@ -108,4 +108,32 @@ mod tests {
         let err = run(&backend, "nope.md").unwrap_err();
         assert_eq!(err.to_string(), "No note at nope.md");
     }
+
+    #[test]
+    fn save_edit_converts_toml_frontmatter_to_yaml_losslessly() {
+        let toml_note = "+++\ntitle = \"My note\"\npath = \"2026/06/02/my-note.md\"\nlabels = [\"work\"]\ncreated = \"2026-06-02T10:00:00+01:00\"\nupdated = \"2026-06-02T10:00:00+01:00\"\nauthor = \"Paul\"\n+++\n\nOriginal body\n";
+        let backend = MemoryBackend::with_files(&[("2026/06/02/my-note.md", toml_note)]);
+        let note = parse_note(toml_note).unwrap();
+        let now = at("2026-06-03T12:00:00+01:00");
+
+        save_edit(&backend, note, "New body", now).unwrap().unwrap();
+
+        let raw = backend.read_file("2026/06/02/my-note.md").unwrap();
+        assert!(
+            raw.starts_with("---"),
+            "Expected YAML frontmatter, got: {}",
+            raw
+        );
+
+        let saved = parse_note(&raw).unwrap();
+        assert_eq!(saved.content, "New body\n");
+        assert_eq!(saved.meta.updated, now);
+        assert_eq!(saved.meta.created, at("2026-06-02T10:00:00+01:00"));
+        assert_eq!(saved.meta.title, "My note");
+        assert_eq!(saved.meta.labels, vec!["work".to_string()]);
+        assert_eq!(
+            saved.meta.extra.get("author"),
+            Some(&serde_yaml_ng::to_value("Paul").unwrap())
+        );
+    }
 }
