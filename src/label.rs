@@ -48,6 +48,25 @@ pub fn render_label(label: &str, color: LabelColor) -> String {
     )
 }
 
+/// Render a note's labels as colored chips, showing at most `max_visible` and
+/// appending `+N more` when some are hidden. `palette` keeps a repeated label's
+/// color stable across notes in the same render.
+pub fn render_labels(labels: &[String], max_visible: usize, palette: &mut LabelPalette) -> String {
+    if labels.is_empty() {
+        return String::new();
+    }
+    let visible = labels.len().min(max_visible);
+    let mut chips: Vec<String> = labels[..visible]
+        .iter()
+        .map(|label| render_label(label, palette.color_for(label)))
+        .collect();
+    let hidden = labels.len() - visible;
+    if hidden > 0 {
+        chips.push(format!("+{hidden} more"));
+    }
+    chips.join(" ")
+}
+
 /// Remembers which color each distinct label was assigned during a single
 /// render, so a repeated label keeps its color. Never persisted between runs.
 #[derive(Default)]
@@ -189,5 +208,40 @@ mod tests {
         assert_eq!(palette.color_for("a"), create_label_color(0));
         assert_eq!(palette.color_for("b"), create_label_color(1));
         assert_eq!(palette.color_for("a"), create_label_color(0));
+    }
+
+    #[test]
+    fn render_labels_empty_is_blank() {
+        let mut palette = LabelPalette::new();
+        assert_eq!(render_labels(&[], 3, &mut palette), "");
+    }
+
+    #[test]
+    fn render_labels_under_limit_shows_all_without_overflow() {
+        let mut palette = LabelPalette::new();
+        let labels = vec!["feature".to_string(), "backend".to_string()];
+        let out = render_labels(&labels, 3, &mut palette);
+        assert!(out.contains(" feature "), "missing feature in: {out:?}");
+        assert!(out.contains(" backend "), "missing backend in: {out:?}");
+        assert!(!out.contains("more"), "unexpected overflow in: {out:?}");
+    }
+
+    #[test]
+    fn render_labels_over_limit_truncates_with_overflow_marker() {
+        let mut palette = LabelPalette::new();
+        let labels = vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+            "e".to_string(),
+        ];
+        let out = render_labels(&labels, 3, &mut palette);
+        assert!(out.contains(" a "), "missing first label in: {out:?}");
+        assert!(
+            out.contains("+2 more"),
+            "missing overflow marker in: {out:?}"
+        );
+        assert!(!out.contains(" d "), "hidden label leaked in: {out:?}");
     }
 }
