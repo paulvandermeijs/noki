@@ -34,6 +34,10 @@ repository = "git@github.com:you/notes.git"
 [note]
 filename = "%Y/%m/%d/%H:%M:%S-%title"
 meta = { author = "Your Name" }
+
+[list]
+# Maximum number of labels shown per note in `ls` before "+N more" (default: 3)
+max_visible_labels = 3
 ```
 
 Capture a note (opens your editor):
@@ -60,6 +64,8 @@ List notes:
 noki ls
 noki ls --json
 ```
+
+Labels render as color-coded chips in the human (non-JSON) output of both `ls` and `show`. In the list view, labels are truncated to `max_visible_labels` (configurable in `[list]`, default 3) with a `+N more` marker; the single-note `show` view lists all labels.
 
 Show a single note:
 
