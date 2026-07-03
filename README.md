@@ -62,7 +62,8 @@ noki --title "Sprint planning" --label work --label meeting
 Open or create today's daily note (its path comes from `note.daily_filename`,
 default `%Y/%m/%d`). If today's note already exists it opens pre-filled for you
 to update; otherwise it is created with the title `Daily note for <date>`. Piped
-input is appended to an existing daily note:
+input is appended to an existing daily note. Every daily note is tagged with the
+`daily` label:
 
 ```sh
 noki --daily
