@@ -75,6 +75,14 @@ noki show 2026/06/02/10:00:00-my-new-note.md --json
 noki show 2026/06/02/10:00:00-my-new-note.md --raw
 ```
 
+Edit an existing note (opens your editor with the note's body; on save the
+`updated` timestamp is refreshed while `created` is preserved, and the title,
+labels, and other frontmatter are kept as-is):
+
+```sh
+noki edit 2026/06/02/10:00:00-my-new-note.md
+```
+
 ## License
 
 [MIT](LICENSE)
