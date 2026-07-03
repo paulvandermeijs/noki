@@ -21,7 +21,7 @@ pub struct Cli {
     pub title: Option<String>,
 
     /// Add a label to the note; repeat to add several
-    #[arg(short = 'l', long = "label")]
+    #[arg(long = "label")]
     pub labels: Vec<String>,
 
     /// The notes repository to use
@@ -109,8 +109,8 @@ mod tests {
     }
 
     #[test]
-    fn parses_short_title_and_label_flags() {
-        let cli = Cli::parse_from(["noki", "-t", "T", "-l", "x", "-l", "y"]);
+    fn parses_short_title_flag() {
+        let cli = Cli::parse_from(["noki", "-t", "T", "--label", "x", "--label", "y"]);
         assert_eq!(cli.title.as_deref(), Some("T"));
         assert_eq!(cli.labels, vec!["x".to_string(), "y".to_string()]);
     }
