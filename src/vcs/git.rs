@@ -372,4 +372,41 @@ mod tests {
             "unexpected error: {error:#}"
         );
     }
+
+    #[test]
+    fn conflicting_note_is_kept_locally_when_rebase_fails() {
+        let (origin_dir, _seed_dir, seed) = origin_with_seed();
+        let origin_url = origin_dir.path().to_str().unwrap();
+
+        let workdir = tempfile::tempdir().unwrap();
+        let noki = Repository::clone(origin_url, workdir.path()).unwrap();
+        set_identity(&noki);
+
+        // Origin gains a file at the SAME path noki is about to write, with different content.
+        commit_file(&seed, "note.md", "origin\n", "remote note");
+        push_master(&seed);
+
+        let backend = GitBackend {
+            workdir: workdir.path().to_path_buf(),
+        };
+        // Must not panic and must return Ok despite the unresolved rebase.
+        backend
+            .write_file("note.md", "local\n", "Add note")
+            .unwrap();
+
+        // The local note is preserved (rebase was aborted, not applied).
+        assert_eq!(backend.read_file("note.md").unwrap(), "local\n");
+
+        // Origin was not overwritten: it still holds the remote content.
+        let origin_repo = Repository::open_bare(origin_dir.path()).unwrap();
+        let entry = origin_repo
+            .head()
+            .unwrap()
+            .peel_to_tree()
+            .unwrap()
+            .get_path(Path::new("note.md"))
+            .unwrap();
+        let blob = origin_repo.find_blob(entry.id()).unwrap();
+        assert_eq!(blob.content(), b"origin\n");
+    }
 }
