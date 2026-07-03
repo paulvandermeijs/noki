@@ -12,6 +12,14 @@ pub struct Cli {
     #[arg(short = 'n', long)]
     pub no_edit: bool,
 
+    /// Set the note title (overrides the title derived from the content)
+    #[arg(short = 't', long)]
+    pub title: Option<String>,
+
+    /// Add a label to the note; repeat to add several
+    #[arg(short = 'l', long = "label")]
+    pub labels: Vec<String>,
+
     /// The notes repository to use
     #[arg(long, global = true)]
     pub repository: Option<String>,
@@ -71,5 +79,28 @@ mod tests {
         let cli = Cli::parse_from(["noki", "--no-edit"]);
         assert!(cli.command.is_none());
         assert!(cli.no_edit);
+    }
+
+    #[test]
+    fn parses_title_and_repeated_labels() {
+        let cli = Cli::parse_from([
+            "noki", "--title", "My title", "--label", "a", "--label", "b",
+        ]);
+        assert_eq!(cli.title.as_deref(), Some("My title"));
+        assert_eq!(cli.labels, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn parses_short_title_and_label_flags() {
+        let cli = Cli::parse_from(["noki", "-t", "T", "-l", "x", "-l", "y"]);
+        assert_eq!(cli.title.as_deref(), Some("T"));
+        assert_eq!(cli.labels, vec!["x".to_string(), "y".to_string()]);
+    }
+
+    #[test]
+    fn title_and_labels_default_empty() {
+        let cli = Cli::parse_from(["noki"]);
+        assert!(cli.title.is_none());
+        assert!(cli.labels.is_empty());
     }
 }
