@@ -1,4 +1,5 @@
 use std::cmp::Reverse;
+use std::io::{IsTerminal, stdout};
 
 use crate::output;
 use crate::vcs::VersionControl;
@@ -12,7 +13,7 @@ pub fn run(vcs: &dyn VersionControl, json: bool, max_visible_labels: usize) -> R
     let rendered = if json {
         output::render_list_json(&notes)?
     } else {
-        output::render_list_human(&notes, max_visible_labels)
+        output::render_list_human(&notes, max_visible_labels, stdout().is_terminal())
     };
     println!("{rendered}");
     Ok(())

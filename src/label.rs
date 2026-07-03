@@ -48,23 +48,39 @@ pub fn render_label(label: &str, color: LabelColor) -> String {
     )
 }
 
-/// Render a note's labels as colored chips, showing at most `max_visible` and
-/// appending `+N more` when some are hidden. `palette` keeps a repeated label's
-/// color stable across notes in the same render.
-pub fn render_labels(labels: &[String], max_visible: usize, palette: &mut LabelPalette) -> String {
+/// Render a note's labels, showing at most `max_visible` and appending `+N more`
+/// when some are hidden. When `color` is set, each label is a space-separated
+/// ANSI chip and `palette` keeps a repeated label's color stable across notes in
+/// the same render; otherwise labels are plain comma-separated text and the
+/// palette is left untouched (for non-terminal output such as pipes and files).
+pub fn render_labels(
+    labels: &[String],
+    max_visible: usize,
+    palette: &mut LabelPalette,
+    color: bool,
+) -> String {
     if labels.is_empty() {
         return String::new();
     }
     let visible = labels.len().min(max_visible);
-    let mut chips: Vec<String> = labels[..visible]
-        .iter()
-        .map(|label| render_label(label, palette.color_for(label)))
-        .collect();
     let hidden = labels.len() - visible;
-    if hidden > 0 {
-        chips.push(format!("+{hidden} more"));
+
+    if color {
+        let mut chips: Vec<String> = labels[..visible]
+            .iter()
+            .map(|label| render_label(label, palette.color_for(label)))
+            .collect();
+        if hidden > 0 {
+            chips.push(format!("+{hidden} more"));
+        }
+        chips.join(" ")
+    } else {
+        let mut parts: Vec<String> = labels[..visible].to_vec();
+        if hidden > 0 {
+            parts.push(format!("+{hidden} more"));
+        }
+        parts.join(", ")
     }
-    chips.join(" ")
 }
 
 /// Remembers which color each distinct label was assigned during a single
@@ -213,14 +229,14 @@ mod tests {
     #[test]
     fn render_labels_empty_is_blank() {
         let mut palette = LabelPalette::new();
-        assert_eq!(render_labels(&[], 3, &mut palette), "");
+        assert_eq!(render_labels(&[], 3, &mut palette, true), "");
     }
 
     #[test]
     fn render_labels_under_limit_shows_all_without_overflow() {
         let mut palette = LabelPalette::new();
         let labels = vec!["feature".to_string(), "backend".to_string()];
-        let out = render_labels(&labels, 3, &mut palette);
+        let out = render_labels(&labels, 3, &mut palette, true);
         assert!(out.contains(" feature "), "missing feature in: {out:?}");
         assert!(out.contains(" backend "), "missing backend in: {out:?}");
         assert!(!out.contains("more"), "unexpected overflow in: {out:?}");
@@ -236,12 +252,26 @@ mod tests {
             "d".to_string(),
             "e".to_string(),
         ];
-        let out = render_labels(&labels, 3, &mut palette);
+        let out = render_labels(&labels, 3, &mut palette, true);
         assert!(out.contains(" a "), "missing first label in: {out:?}");
         assert!(
             out.contains("+2 more"),
             "missing overflow marker in: {out:?}"
         );
         assert!(!out.contains(" d "), "hidden label leaked in: {out:?}");
+    }
+
+    #[test]
+    fn render_labels_without_color_is_plain_comma_separated() {
+        let mut palette = LabelPalette::new();
+        let labels = vec![
+            "feature".to_string(),
+            "backend".to_string(),
+            "priority".to_string(),
+            "ops".to_string(),
+        ];
+        let out = render_labels(&labels, 3, &mut palette, false);
+        assert!(!out.contains('\x1b'), "expected no ANSI codes in: {out:?}");
+        assert_eq!(out, "feature, backend, priority, +1 more");
     }
 }

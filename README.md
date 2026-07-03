@@ -65,7 +65,7 @@ noki ls
 noki ls --json
 ```
 
-Labels render as color-coded chips in the human (non-JSON) output of both `ls` and `show`. In the list view, labels are truncated to `max_visible_labels` (configurable in `[list]`, default 3) with a `+N more` marker; the single-note `show` view lists all labels.
+Labels render as color-coded chips in the human (non-JSON) output of both `ls` and `show` when writing to a terminal; piped or redirected output falls back to plain comma-separated text. In the list view, labels are truncated to `max_visible_labels` (configurable in `[list]`, default 3) with a `+N more` marker; the single-note `show` view lists all labels.
 
 Show a single note:
 

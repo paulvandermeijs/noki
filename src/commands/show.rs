@@ -1,3 +1,5 @@
+use std::io::{IsTerminal, stdout};
+
 use crate::note::parse_note;
 use crate::output;
 use crate::vcs::VersionControl;
@@ -16,7 +18,7 @@ pub fn run(vcs: &dyn VersionControl, path: &str, json: bool, raw: bool) -> Resul
     let rendered = if json {
         output::render_note_json(&note)?
     } else {
-        output::render_note_human(&note)
+        output::render_note_human(&note, stdout().is_terminal())
     };
     println!("{rendered}");
     Ok(())

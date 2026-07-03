@@ -6,8 +6,9 @@ use tabled::builder::Builder;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-/// Render a single note as a metadata table followed by its content.
-pub fn render_note_human(note: &Note) -> String {
+/// Render a single note as a metadata table followed by its content. `color`
+/// enables ANSI-colored label chips (disable for non-terminal output).
+pub fn render_note_human(note: &Note, color: bool) -> String {
     let mut builder = Builder::default();
     builder.push_record(["title".to_string(), note.meta.title.clone()]);
     builder.push_record(["path".to_string(), note.meta.path.clone()]);
@@ -15,7 +16,7 @@ pub fn render_note_human(note: &Note) -> String {
     builder.push_record(["updated".to_string(), note.meta.updated.to_rfc2822()]);
     if !note.meta.labels.is_empty() {
         let mut palette = LabelPalette::new();
-        let labels = label::render_labels(&note.meta.labels, usize::MAX, &mut palette);
+        let labels = label::render_labels(&note.meta.labels, usize::MAX, &mut palette, color);
         builder.push_record(["labels".to_string(), labels]);
     }
     for (key, value) in &note.meta.extra {
@@ -31,12 +32,14 @@ pub fn render_note_json(note: &Note) -> Result<String> {
     Ok(serde_json::to_string_pretty(note)?)
 }
 
-/// Render a list of notes as a table (path, title, labels, updated), without content.
-pub fn render_list_human(notes: &[Note], max_visible_labels: usize) -> String {
+/// Render a list of notes as a table (path, title, labels, updated), without
+/// content. `color` enables ANSI-colored label chips (disable for non-terminal
+/// output).
+pub fn render_list_human(notes: &[Note], max_visible_labels: usize, color: bool) -> String {
     let mut palette = LabelPalette::new();
     let rows: Vec<ListRow> = notes
         .iter()
-        .map(|note| ListRow::from_note(note, max_visible_labels, &mut palette))
+        .map(|note| ListRow::from_note(note, max_visible_labels, &mut palette, color))
         .collect();
     let mut table = Table::new(rows);
     table.with(Style::modern());
@@ -77,11 +80,16 @@ struct ListRow {
 }
 
 impl ListRow {
-    fn from_note(note: &Note, max_visible_labels: usize, palette: &mut LabelPalette) -> Self {
+    fn from_note(
+        note: &Note,
+        max_visible_labels: usize,
+        palette: &mut LabelPalette,
+        color: bool,
+    ) -> Self {
         ListRow {
             path: note.meta.path.clone(),
             title: note.meta.title.clone(),
-            labels: label::render_labels(&note.meta.labels, max_visible_labels, palette),
+            labels: label::render_labels(&note.meta.labels, max_visible_labels, palette, color),
             updated: note.meta.updated.to_rfc2822(),
         }
     }
@@ -99,11 +107,23 @@ mod tests {
     #[test]
     fn list_human_shows_colored_labels_truncated() {
         let note = parse_note(RAW_LABELS).unwrap();
-        let text = render_list_human(&[note], 3);
+        let text = render_list_human(&[note], 3, true);
         assert!(
             text.contains("\x1b["),
             "expected ANSI color codes in:\n{text}"
         );
+        assert!(text.contains("feature"), "expected first label in:\n{text}");
+        assert!(
+            text.contains("+1 more"),
+            "expected overflow marker in:\n{text}"
+        );
+    }
+
+    #[test]
+    fn list_human_without_color_omits_ansi() {
+        let note = parse_note(RAW_LABELS).unwrap();
+        let text = render_list_human(&[note], 3, false);
+        assert!(!text.contains('\x1b'), "expected no ANSI codes in:\n{text}");
         assert!(text.contains("feature"), "expected first label in:\n{text}");
         assert!(
             text.contains("+1 more"),
@@ -132,7 +152,7 @@ mod tests {
     #[test]
     fn note_human_shows_title_and_content() {
         let note = parse_note(RAW).unwrap();
-        let text = render_note_human(&note);
+        let text = render_note_human(&note, true);
         assert!(text.contains("My new note"));
         assert!(text.contains("Hello, World!"));
     }
@@ -141,7 +161,7 @@ mod tests {
     fn note_human_shows_extra_meta() {
         let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\nauthor: Paul van der Meijs\n---\n\nBody\n";
         let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note);
+        let text = render_note_human(&note, true);
         assert!(text.contains("author"), "expected author key in:\n{text}");
         assert!(
             text.contains("Paul van der Meijs"),
@@ -152,12 +172,24 @@ mod tests {
     #[test]
     fn note_human_colors_labels() {
         let note = parse_note(RAW_LABELS).unwrap();
-        let text = render_note_human(&note);
+        let text = render_note_human(&note, true);
         assert!(text.contains("labels"), "expected labels row in:\n{text}");
         assert!(
             text.contains("\x1b["),
             "expected ANSI color codes in:\n{text}"
         );
+        assert!(text.contains("feature"), "expected label text in:\n{text}");
+        assert!(
+            text.contains("ops"),
+            "single-note view shows all labels:\n{text}"
+        );
+    }
+
+    #[test]
+    fn note_human_without_color_omits_ansi() {
+        let note = parse_note(RAW_LABELS).unwrap();
+        let text = render_note_human(&note, false);
+        assert!(!text.contains('\x1b'), "expected no ANSI codes in:\n{text}");
         assert!(text.contains("feature"), "expected label text in:\n{text}");
         assert!(
             text.contains("ops"),
