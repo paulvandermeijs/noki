@@ -72,6 +72,23 @@ pub(crate) fn build_note(
         .unwrap_or(note::DEFAULT_FILENAME);
     let path = note::note_path(template, &title, now);
 
+    let note = assemble_note(path.clone(), title, content, config, labels, now);
+    let raw = note::to_raw(&note).ok()?;
+    Some((path, raw))
+}
+
+/// Assemble a `Note` at an explicit `path` with an already-resolved `title`.
+/// Merges config static meta (skipping reserved keys), cleans `labels`, sets
+/// both `created` and `updated` to `now`, and appends a trailing newline to the
+/// (already-trimmed) `content`.
+pub(crate) fn assemble_note(
+    path: String,
+    title: String,
+    content: &str,
+    config: &Config,
+    labels: &[String],
+    now: DateTime<FixedOffset>,
+) -> Note {
     let mut extra = BTreeMap::new();
     for (key, value) in &config.note.meta {
         if RESERVED_META_KEYS.contains(&key.as_str()) {
@@ -84,7 +101,7 @@ pub(crate) fn build_note(
 
     let meta = Meta {
         title,
-        path: path.clone(),
+        path,
         labels: labels
             .iter()
             .map(|label| label.trim())
@@ -95,12 +112,10 @@ pub(crate) fn build_note(
         updated: now,
         extra,
     };
-    let full_note = Note {
+    Note {
         meta,
         content: format!("{content}\n"),
-    };
-    let raw = note::to_raw(&full_note).ok()?;
-    Some((path, raw))
+    }
 }
 
 #[cfg(test)]
@@ -239,5 +254,32 @@ mod tests {
             Some(&serde_yaml_ng::to_value("Paul").unwrap())
         );
         assert!(!note.meta.extra.contains_key("title"));
+    }
+
+    #[test]
+    fn assemble_note_builds_at_explicit_path_with_given_title() {
+        let mut config = Config::default();
+        config.note.meta.insert(
+            "author".to_string(),
+            toml::Value::String("Paul".to_string()),
+        );
+        let note = assemble_note(
+            "2026/07/03.md".to_string(),
+            "Daily note for 2026-07-03".to_string(),
+            "Body text",
+            &config,
+            &["work".to_string()],
+            now(),
+        );
+        assert_eq!(note.meta.path, "2026/07/03.md");
+        assert_eq!(note.meta.title, "Daily note for 2026-07-03");
+        assert_eq!(note.content, "Body text\n");
+        assert_eq!(note.meta.labels, vec!["work".to_string()]);
+        assert_eq!(note.meta.created, now());
+        assert_eq!(note.meta.updated, now());
+        assert_eq!(
+            note.meta.extra.get("author"),
+            Some(&serde_yaml_ng::to_value("Paul").unwrap())
+        );
     }
 }
