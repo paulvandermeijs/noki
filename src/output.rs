@@ -14,7 +14,9 @@ pub fn render_note_human(note: &Note) -> String {
     builder.push_record(["created".to_string(), note.meta.created.to_rfc2822()]);
     builder.push_record(["updated".to_string(), note.meta.updated.to_rfc2822()]);
     if !note.meta.labels.is_empty() {
-        builder.push_record(["labels".to_string(), note.meta.labels.join(", ")]);
+        let mut palette = LabelPalette::new();
+        let labels = label::render_labels(&note.meta.labels, usize::MAX, &mut palette);
+        builder.push_record(["labels".to_string(), labels]);
     }
     for (key, value) in &note.meta.extra {
         builder.push_record([key.clone(), meta_value_display(value)]);
@@ -144,6 +146,22 @@ mod tests {
         assert!(
             text.contains("Paul van der Meijs"),
             "expected author value in:\n{text}"
+        );
+    }
+
+    #[test]
+    fn note_human_colors_labels() {
+        let note = parse_note(RAW_LABELS).unwrap();
+        let text = render_note_human(&note);
+        assert!(text.contains("labels"), "expected labels row in:\n{text}");
+        assert!(
+            text.contains("\x1b["),
+            "expected ANSI color codes in:\n{text}"
+        );
+        assert!(text.contains("feature"), "expected label text in:\n{text}");
+        assert!(
+            text.contains("ops"),
+            "single-note view shows all labels:\n{text}"
         );
     }
 }
