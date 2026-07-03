@@ -15,11 +15,12 @@ pub struct LabelColor {
     pub foreground: Rgb,
 }
 
-/// Derive a stable color for the label at first-seen `index`. The hue is spread
-/// by the golden angle so nearby indices look distinct; the foreground shares
-/// the background's hue but is lighter on a dark chip and darker on a light one.
+/// Derive a stable color for the label at first-seen `index`. Hues start at
+/// `BASE_HUE` (a neutral blue) and are spread by the golden angle so nearby
+/// indices look distinct; the foreground shares the background's hue but is
+/// lighter on a dark chip and darker on a light one.
 pub fn create_label_color(index: usize) -> LabelColor {
-    let hue = (index as f64 * GOLDEN_ANGLE) % 360.0;
+    let hue = (BASE_HUE + index as f64 * GOLDEN_ANGLE) % 360.0;
     let saturation = 0.55;
     let background_lightness = BACKGROUND_LIGHTNESS[index % BACKGROUND_LIGHTNESS.len()];
     let background = hsl_to_rgb(hue, saturation, background_lightness);
@@ -131,6 +132,10 @@ fn hsl_to_rgb(hue: f64, saturation: f64, lightness: f64) -> Rgb {
     }
 }
 
+/// The starting hue, in degrees — a neutral blue, so the first label reads as
+/// calm rather than an alarming red.
+const BASE_HUE: f64 = 210.0;
+
 /// The golden angle, in degrees — spreads hues so adjacent indices differ.
 const GOLDEN_ANGLE: f64 = 137.507_764_05;
 
@@ -151,6 +156,15 @@ mod tests {
         assert_eq!(hsl_to_rgb(0.0, 1.0, 0.5), Rgb { r: 255, g: 0, b: 0 });
         assert_eq!(hsl_to_rgb(120.0, 1.0, 0.5), Rgb { r: 0, g: 255, b: 0 });
         assert_eq!(hsl_to_rgb(240.0, 1.0, 0.5), Rgb { r: 0, g: 0, b: 255 });
+    }
+
+    #[test]
+    fn first_label_starts_on_a_blue_hue_not_red() {
+        let bg = create_label_color(0).background;
+        assert!(
+            bg.b > bg.r && bg.b > bg.g,
+            "expected a blue-dominant first chip, got {bg:?}"
+        );
     }
 
     #[test]
