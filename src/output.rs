@@ -57,32 +57,39 @@ pub fn render_list_json(notes: &[Note]) -> Result<String> {
     Ok(serde_json::to_string_pretty(&summaries)?)
 }
 
-/// Style the list table: modern borders, a double-line rule separating the
-/// header row from the body, and (when `color`) a bold header row. The rule
-/// uses single-vertical/double-horizontal junctions (`╞ ╪ ╡`) so it joins the
-/// surrounding single-line borders flush instead of leaving a seam.
+/// Style the list table: an outer frame with a double-line rule under the
+/// header and horizontal rules between rows, but no vertical column separators —
+/// columns are spaced apart by their padding. Headers are bold when `color`. The
+/// rule uses `╞`/`╡` ends so it joins the single-line frame flush.
 fn apply_list_style(table: &mut Table, color: bool) {
     let header_rule = HorizontalLine::inherit(Style::extended())
+        .remove_intersection()
         .left('╞')
-        .right('╡')
-        .intersection('╪');
-    table.with(Style::modern().horizontals([(1, header_rule)]));
+        .right('╡');
+    table.with(
+        Style::modern()
+            .remove_vertical()
+            .horizontals([(1, header_rule)]),
+    );
     if color {
         table.with(Modify::new(Rows::first()).with(Color::BOLD));
     }
 }
 
-/// Style the metadata table: modern borders with a double-line rule separating
-/// the header column (keys) from the values, and (when `color`) bold keys. The
-/// divider uses double-vertical/single-horizontal junctions (`╥` top, `╫`
-/// crossings, `╨` bottom) so it joins the surrounding single-line borders flush
-/// instead of leaving a seam.
+/// Style the metadata table: an outer frame with a double-line divider between
+/// the header column (keys) and the values, but no horizontal rules between
+/// rows. Keys are bold when `color`. The divider uses `╥`/`╨` ends so it joins
+/// the single-line frame flush.
 fn apply_meta_style(table: &mut Table, color: bool) {
     let divider = VerticalLine::inherit(Style::extended())
+        .remove_intersection()
         .top('╥')
-        .bottom('╨')
-        .intersection('╫');
-    table.with(Style::modern().verticals([(1, divider)]));
+        .bottom('╨');
+    table.with(
+        Style::modern()
+            .remove_horizontal()
+            .verticals([(1, divider)]),
+    );
     if color {
         table.with(Modify::new(Columns::first()).with(Color::BOLD));
     }
