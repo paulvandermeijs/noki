@@ -1,0 +1,23 @@
+{
+  "skill_name": "capturing-notes",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm on a call and just decided we're moving the launch to Sept 3rd because QA needs another week. Save this as a note in my noki with the title 'Launch date slip' and label it work and decisions.",
+      "expected_output": "Runs noki non-interactively with piped stdin and --no-edit, passing --title and two --label flags. Never runs bare noki or noki edit.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Log to my daily note that I finished the auth refactor and merged the PR.",
+      "expected_output": "Pipes the text to `noki --daily --no-edit` so it appends to today's daily note. No editor invocation.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Here's a markdown snippet with a heading and a bulleted list — jot it down in noki for me.",
+      "expected_output": "Captures multi-line Markdown via stdin (printf/heredoc) with --no-edit, preserving newlines. Does not open an editor.",
+      "files": []
+    }
+  ]
+}
