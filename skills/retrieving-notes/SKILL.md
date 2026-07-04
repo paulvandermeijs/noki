@@ -1,6 +1,6 @@
 ---
 name: retrieving-notes
-description: Find, read, and reason over the user's noki notes by driving noki's structured output. Use this whenever the user wants to look up, search, list, summarize, or read notes they saved in noki: phrasings like "what did I write about X", "find my notes on Y", "show me the note at <path>", "list my recent notes", "read today's daily note", or "what notes do I have tagged Z". noki has no search command, so reach for this skill to run the list → filter → show idiom rather than guessing.
+description: Find, read, and reason over the user's noki notes by driving noki's structured output. Use this whenever the user wants to look up, search, list, summarize, or read notes they saved in noki — phrasings like "what did I write about X", "find my notes on Y", "show me the note at <path>", "list my recent notes", "read today's daily note", or "what notes do I have tagged Z". noki has no search command, so reach for this skill to run the list → filter → show idiom rather than guessing.
 ---
 
 # Retrieving notes from noki
