@@ -65,7 +65,11 @@ noki show "<path from the filtered result>" --json
 
 For matching on note *bodies* (not just metadata), you must `show --json` the candidates and inspect `content` — `ls --json` deliberately omits bodies to stay small, so body search is a two-step: narrow by metadata first, then fetch and scan content.
 
-## What you can't do from an agent
+## Changing a note is a separate skill
 
-- `noki edit <path>` opens `$EDITOR` — it's interactive and not agent-usable.
-- noki has **no non-interactive write-back** for an existing note. You can read a note's exact text with `noki show <path> --raw`, but there is no supported flag to save an edited version programmatically. If the user wants a note changed, say so plainly rather than inventing a command; a new note can still be captured (see the capturing-notes skill).
+This skill is read-only. If the user wants to **edit** an existing note — change a line, fix a bullet, append text — that's a write, and it's covered by the **capturing-notes** skill.
+
+Two things worth knowing so you route correctly:
+
+- `noki edit <path>` opens the note in an interactive editor by default, so it looks agent-unusable at first glance. It isn't: noki runs `$VISUAL`/`$EDITOR` on a temp file holding the note body, so you can drive it non-interactively by pointing `$VISUAL` at a script. The capturing-notes skill documents the exact technique and its gotchas.
+- Reading is still your job here: to prepare an edit, fetch the current text with `noki show <path> --raw`, then hand off to the capturing-notes approach to write it back.

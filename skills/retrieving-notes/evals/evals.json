@@ -1,0 +1,17 @@
+{
+  "skill_name": "retrieving-notes",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What did I write about the sprint planning meeting? Look through my noki notes and summarize it.",
+      "expected_output": "Runs `noki ls --json`, filters by title/label (e.g. with jq on .meta.title or .meta.labels), then `noki show <path> --json` on the match and summarizes content. Parses JSON, not the table.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "List all my notes tagged 'work' from my noki.",
+      "expected_output": "Runs `noki ls --json` and filters on .meta.labels containing 'work' (e.g. `jq '[.[] | select(.meta.labels | index(\"work\"))]'`). Does not scrape the human table.",
+      "files": []
+    }
+  ]
+}

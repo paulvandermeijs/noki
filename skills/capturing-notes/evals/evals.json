@@ -18,6 +18,12 @@
       "prompt": "Here's a markdown snippet with a heading and a bulleted list — jot it down in noki for me.",
       "expected_output": "Captures multi-line Markdown via stdin (printf/heredoc) with --no-edit, preserving newlines. Does not open an editor.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Update the note at 2026/06/02/10:00:00-sprint-planning.md — change the second bullet to 'Hire two more backend engineers'.",
+      "expected_output": "Reads the current body with `noki show <path> --raw`, then drives `noki edit <path>` non-interactively by setting VISUAL to a script that rewrites the body temp file. Confirms the change succeeded; does NOT claim editing is impossible.",
+      "files": []
     }
   ]
 }
