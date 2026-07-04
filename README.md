@@ -97,6 +97,22 @@ labels, and other frontmatter are kept as-is):
 noki edit 2026/06/02/10:00:00-my-new-note.md
 ```
 
+## Agent skills
+
+Noki ships with two [agent skills](skills/) that teach an AI coding agent (Claude
+Code or compatible) how to drive the CLI:
+
+- [`capturing-notes`](skills/capturing-notes/SKILL.md) — capturing notes
+  non-interactively (`--no-edit` with piped input, titles, labels, daily notes)
+  and editing existing notes via a scripted `$VISUAL`.
+- [`retrieving-notes`](skills/retrieving-notes/SKILL.md) — finding and reading
+  notes through the structured `--json` output, including the
+  list → filter → show search idiom.
+
+Install them by copying the relevant `skills/<name>/` directory into your agent's
+skills location (e.g. `.claude/skills/`). Each `evals/` folder holds the test
+prompts used to validate the skill.
+
 ## License
 
 [MIT](LICENSE)
