@@ -32,8 +32,13 @@ Set your notes repository once in `.noki.toml` (or pass `--repository`):
 repository = "git@github.com:you/notes.git"
 
 [note]
-filename = "%Y/%m/%d/%H:%M:%S-%title"
-daily_filename = "%Y/%m/%d"
+# Filename templates use {field} tokens drawn from the note's frontmatter:
+# {title}, {labels}, {created:%Y/%m/%d}, {updated:...}, and any custom meta key
+# (e.g. {author}). Date tokens take a chrono strftime format (default %Y-%m-%d).
+# A missing or empty value renders as "unknown-<field>" (e.g. unknown-author).
+filename = "{created:%Y/%m/%d/%H-%M-%S}-{title}"
+daily_filename = "{created:%Y/%m/%d}"
+# daily_title is a title, not a path, so it still uses chrono's %-strftime directly.
 daily_title = "Daily note for %Y-%m-%d"
 daily_label = "daily"
 # Render `show` at a fixed width, in columns: the body wraps at it and the
@@ -66,7 +71,7 @@ noki --title "Sprint planning" --label work --label meeting
 ```
 
 Open or create today's daily note (its path comes from `note.daily_filename`,
-default `%Y/%m/%d`). If today's note already exists it opens pre-filled for you
+default `{created:%Y/%m/%d}`). If today's note already exists it opens pre-filled for you
 to update; otherwise it is created with a title from `note.daily_title` (default
 `Daily note for %Y-%m-%d`). Piped input is appended to an existing daily note.
 Every daily note is tagged with `note.daily_label` (default `daily`):

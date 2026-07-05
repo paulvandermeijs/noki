@@ -28,7 +28,7 @@ The crate is a **library (`src/lib.rs`) plus a thin binary (`src/main.rs`)**. `m
 
 **Config** (`src/config.rs`) is layered, lowest to highest precedence: a global file (`directories` config dir → `noki/config.toml`), then every `.noki.toml` from the current directory up to the filesystem root (nearest wins), then the `--repository` CLI flag. `load_from` is the injectable seam that tests drive with temp dirs.
 
-**Output** (`src/output.rs`) renders a note three ways: human (a `tabled` metadata table + body, including `extra` meta rows), JSON (serde; list output omits `content`), and raw (unmodified file text). `create` derives the filename from a template (`%Y/%m/%d/%H:%M:%S-%title`, `%title` = slugified title) and merges config static meta into frontmatter, skipping reserved keys.
+**Output** (`src/output.rs`) renders a note three ways: human (a `tabled` metadata table + body, including `extra` meta rows), JSON (serde; list output omits `content`), and raw (unmodified file text). `create` derives the filename from a flat template rendered by `src/template.rs`: `{field}` / `{field:format}` tokens projected from the note's frontmatter — `{title}` and `{labels}` (slugified), `{created:%Y/%m/%d}` / `{updated:…}` (chrono-formatted), and any static config meta key (e.g. `{author}`). A missing or empty value renders as `unknown-<field>`; only template *syntax* errors (bad date format, `:format` on a text field, unterminated `{`) return `Err` — it never panics. The default is `{created:%Y/%m/%d/%H-%M-%S}-{title}`; `note_path` appends `.md`. `note.daily_title` still uses chrono `%` directly (it is a title, not a path). `create` also merges config static meta into frontmatter, skipping reserved keys.
 
 ## Conventions
 
