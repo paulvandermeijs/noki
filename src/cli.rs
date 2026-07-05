@@ -57,7 +57,7 @@ pub enum Commands {
         /// The repository-relative path of the note
         path: String,
     },
-    /// Fetch the latest notes from the remote and rebase the local clone
+    /// Update your notes with changes made elsewhere
     Refresh,
 }
 
