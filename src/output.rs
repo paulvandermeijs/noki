@@ -66,26 +66,7 @@ pub fn render_note_human(note: &Note, table_width: TableWidth, color: bool) -> S
     }
     let mut table = builder.build();
     apply_meta_style(&mut table, color);
-    match table_width {
-        // Adapt to content, bounded by the budget (shrinks the value column).
-        TableWidth::Fit(width) => {
-            table.with(Width::wrap(width).keep_words(true));
-        }
-        // Fill exactly the budget by sizing both columns. The key column keeps
-        // its natural width (stable across notes) but is capped at half the
-        // content so an unusually long field name wraps instead of starving the
-        // value column; the value column takes the rest.
-        TableWidth::Fixed(width) => {
-            let content = width.saturating_sub(META_TABLE_FRAME).max(2);
-            let key_col = key_width.clamp(1, content / 2);
-            let value_col = (content - key_col).max(1);
-            for (column, size) in [(0usize, key_col), (1usize, value_col)] {
-                let column = Columns::one(column);
-                table.with(Modify::new(column).with(Width::wrap(size).keep_words(true)));
-                table.with(Modify::new(column).with(Width::increase(size)));
-            }
-        }
-    }
+    apply_table_width(&mut table, table_width, key_width);
     let body = if color {
         crate::render::render(&note.content, width, true)
     } else {
@@ -157,6 +138,30 @@ fn apply_meta_style(table: &mut Table, color: bool) {
     );
     if color {
         table.with(Modify::new(Columns::first()).with(Color::BOLD));
+    }
+}
+
+/// Size the metadata table to `table_width`. `Fit` wraps within the budget,
+/// shrinking the value column and leaving the key column at its natural width.
+/// `Fixed` fills the budget exactly: the key column keeps its natural width but
+/// is capped at half the content (so an unusually long field name wraps instead
+/// of starving the value column), and the value column takes the rest. `key_width`
+/// is the widest key's column count.
+fn apply_table_width(table: &mut Table, table_width: TableWidth, key_width: usize) {
+    match table_width {
+        TableWidth::Fit(width) => {
+            table.with(Width::wrap(width).keep_words(true));
+        }
+        TableWidth::Fixed(width) => {
+            let content = width.saturating_sub(META_TABLE_FRAME).max(2);
+            let key_col = key_width.clamp(1, content / 2);
+            let value_col = (content - key_col).max(1);
+            for (column, size) in [(0usize, key_col), (1usize, value_col)] {
+                let column = Columns::one(column);
+                table.with(Modify::new(column).with(Width::wrap(size).keep_words(true)));
+                table.with(Modify::new(column).with(Width::increase(size)));
+            }
+        }
     }
 }
 
