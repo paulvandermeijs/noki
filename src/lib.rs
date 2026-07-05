@@ -7,4 +7,5 @@ pub mod label;
 pub mod note;
 pub mod output;
 mod render;
+mod template;
 pub mod vcs;
