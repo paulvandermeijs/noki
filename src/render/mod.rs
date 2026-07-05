@@ -1,8 +1,9 @@
-// TODO: remove once Task 3/4 wires this module into `commands::show` and uses
+// TODO: remove once Task 5 wires this module into `commands::show` and uses
 // its public items; until then clippy flags them as dead code.
 #![allow(dead_code)]
 
 mod inline;
+mod table;
 mod wrap;
 
 use inline::{Span, Style, emit, spans};
@@ -37,7 +38,7 @@ fn block(node: &Node, width: usize, color: bool) -> String {
         Node::Blockquote(b) => blockquote(&b.children, width, color),
         Node::ThematicBreak(_) => rule(width, color),
         Node::Html(h) => decorate_lines(&h.value, color, |line| format!("\x1b[2m{line}\x1b[0m")),
-        Node::Table(_) => String::new(), // implemented in Task 4
+        Node::Table(t) => table::render_table(t, color),
         other => other
             .children()
             .map(|children| paragraph(children, width, color))
