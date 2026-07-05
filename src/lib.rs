@@ -6,4 +6,5 @@ pub mod io;
 pub mod label;
 pub mod note;
 pub mod output;
+mod render;
 pub mod vcs;
