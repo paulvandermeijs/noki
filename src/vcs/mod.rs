@@ -3,7 +3,7 @@ pub mod git;
 use crate::config::Config;
 use crate::vcs::git::GitBackend;
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Backend-agnostic storage for notes, backed by a version-control system.
 pub trait VersionControl {
@@ -24,6 +24,15 @@ pub fn open_backend(config: &Config) -> Result<Box<dyn VersionControl>> {
     Ok(Box::new(GitBackend::open_or_clone(url, &dest)?))
 }
 
+/// Open the working clone for the configured repository **only if it already
+/// exists on disk**. Returns `Ok(None)` when the repository has not been cloned
+/// yet, so callers (e.g. shell completion) never trigger a network clone.
+pub fn open_existing(config: &Config) -> Result<Option<Box<dyn VersionControl>>> {
+    let url = config.repository()?;
+    let dest = clone_dir(url)?;
+    open_existing_at(url, &dest)
+}
+
 fn clone_dir(url: &str) -> Result<PathBuf> {
     let dirs = directories::BaseDirs::new()
         .ok_or_else(|| anyhow::anyhow!("Cannot determine a data directory"))?;
@@ -38,6 +47,14 @@ fn clone_dir(url: &str) -> Result<PathBuf> {
         })
         .collect();
     Ok(dirs.data_dir().join("noki").join("repos").join(sanitized))
+}
+
+fn open_existing_at(url: &str, dest: &Path) -> Result<Option<Box<dyn VersionControl>>> {
+    if dest.join(".git").exists() {
+        Ok(Some(Box::new(GitBackend::open_or_clone(url, dest)?)))
+    } else {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
@@ -113,5 +130,25 @@ mod tests {
     fn memory_backend_refresh_is_ok() {
         let backend = MemoryBackend::new();
         assert!(backend.refresh().is_ok());
+    }
+
+    #[test]
+    fn open_existing_at_returns_none_when_not_cloned() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("repo"); // never created
+        assert!(open_existing_at("some-url", &dest).unwrap().is_none());
+    }
+
+    #[test]
+    fn open_existing_at_returns_backend_when_git_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path();
+        std::fs::create_dir(dest.join(".git")).unwrap();
+        std::fs::write(dest.join("note.md"), "hi").unwrap();
+
+        let backend = open_existing_at("some-url", dest)
+            .unwrap()
+            .expect("expected a backend when .git is present");
+        assert_eq!(backend.list_files().unwrap(), vec!["note.md".to_string()]);
     }
 }
