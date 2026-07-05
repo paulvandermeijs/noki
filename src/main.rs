@@ -1,8 +1,11 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::CompleteEnv;
 use noki::cli::{Cli, Commands};
 use noki::{commands, config, vcs};
 
 fn main() {
+    CompleteEnv::with_factory(Cli::command).complete();
+
     let cli = Cli::parse();
 
     env_logger::Builder::new()
