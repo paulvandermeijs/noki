@@ -3,7 +3,9 @@ use crate::render::inline::{Span, Style};
 /// Greedy word-wrap a run of spans to at most `width` visible columns per line.
 /// Words break only at spaces; a `"\n"` span forces a new line; a word longer
 /// than `width` overflows onto its own line rather than being split. Widths are
-/// plain char counts — spans carry no ANSI.
+/// plain char counts — spans carry no ANSI. The space joining two words keeps
+/// the style of the space character it came from, so a space inside a styled run
+/// (e.g. a multi-word link) stays styled rather than breaking the decoration.
 pub(crate) fn wrap(spans: &[Span], width: usize) -> Vec<Vec<Span>> {
     let width = width.max(1);
     let mut lines: Vec<Vec<Span>> = Vec::new();
@@ -11,6 +13,9 @@ pub(crate) fn wrap(spans: &[Span], width: usize) -> Vec<Vec<Span>> {
     let mut line_width = 0usize;
     let mut word: Vec<Span> = Vec::new();
     let mut word_width = 0usize;
+    // Style of the separator that will precede the next word placed on a line —
+    // i.e. the style of the space character that ended the previous word.
+    let mut separator = Style::default();
 
     for span in spans {
         let style = span.style;
@@ -26,7 +31,9 @@ pub(crate) fn wrap(spans: &[Span], width: usize) -> Vec<Vec<Span>> {
                         &mut word,
                         &mut word_width,
                         width,
+                        separator,
                     );
+                    separator = style;
                 }
                 '\n' => {
                     push_chunk(&mut chunk, style, &mut word, &mut word_width);
@@ -37,9 +44,11 @@ pub(crate) fn wrap(spans: &[Span], width: usize) -> Vec<Vec<Span>> {
                         &mut word,
                         &mut word_width,
                         width,
+                        separator,
                     );
                     lines.push(std::mem::take(&mut line));
                     line_width = 0;
+                    separator = Style::default();
                 }
                 _ => chunk.push(ch),
             }
@@ -53,6 +62,7 @@ pub(crate) fn wrap(spans: &[Span], width: usize) -> Vec<Vec<Span>> {
         &mut word,
         &mut word_width,
         width,
+        separator,
     );
     if !line.is_empty() {
         lines.push(line);
@@ -78,6 +88,7 @@ fn place_word(
     word: &mut Vec<Span>,
     word_width: &mut usize,
     width: usize,
+    separator: Style,
 ) {
     if *word_width == 0 {
         return;
@@ -89,7 +100,7 @@ fn place_word(
     if !line.is_empty() {
         line.push(Span {
             text: " ".to_string(),
-            style: Style::default(),
+            style: separator,
         });
         *line_width += 1;
     }
@@ -157,6 +168,59 @@ mod tests {
         // "hi" | "supercalifragilistic" | "bye"
         assert_eq!(lines.len(), 3);
         assert_eq!(line_text(&lines[1]), "supercalifragilistic");
+    }
+
+    #[test]
+    fn separator_keeps_style_of_multi_word_run() {
+        // A space inside a styled run (e.g. a multi-word link) must keep that
+        // style so the decoration is continuous across the space.
+        let spans = vec![Span {
+            text: "click here".into(),
+            style: Style {
+                link: true,
+                ..Style::default()
+            },
+        }];
+        let lines = wrap(&spans, 80);
+        assert_eq!(lines.len(), 1);
+        let separator = lines[0]
+            .iter()
+            .find(|s| s.text == " ")
+            .expect("a separator space");
+        assert!(
+            separator.style.link,
+            "space inside a link should keep the link style"
+        );
+        assert!(
+            lines[0].iter().all(|s| s.style.link),
+            "every span (words and space) should be link-styled"
+        );
+    }
+
+    #[test]
+    fn separator_uses_the_space_char_origin_style() {
+        // "foo " (plain) then "bar baz" (bold): the foo|bar space is plain (it
+        // lived in the plain run) and the bar|baz space is bold.
+        let spans = vec![
+            Span {
+                text: "foo ".into(),
+                style: Style::default(),
+            },
+            Span {
+                text: "bar baz".into(),
+                style: Style {
+                    bold: true,
+                    ..Style::default()
+                },
+            },
+        ];
+        let lines = wrap(&spans, 80);
+        let separators: Vec<bool> = lines[0]
+            .iter()
+            .filter(|s| s.text == " ")
+            .map(|s| s.style.bold)
+            .collect();
+        assert_eq!(separators, vec![false, true], "foo|bar plain, bar|baz bold");
     }
 
     #[test]
