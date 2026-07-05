@@ -193,14 +193,14 @@ fn rebase_onto_origin(repo: &git2::Repository, branch: &str) -> Result<()> {
     }
 }
 
-fn sync_and_push(repo: &git2::Repository) -> Result<()> {
+fn sync(repo: &git2::Repository) -> Result<()> {
     let mut remote = match repo.find_remote("origin") {
         Ok(remote) => remote,
         Err(_) => return Ok(()), // no remote: local-only repository
     };
     let head = repo.head()?;
     if !head.is_branch() {
-        anyhow::bail!("Cannot push from a detached HEAD");
+        anyhow::bail!("Cannot sync from a detached HEAD");
     }
     let branch = head
         .shorthand()
@@ -208,7 +208,21 @@ fn sync_and_push(repo: &git2::Repository) -> Result<()> {
         .to_string();
 
     fetch_origin(repo, &mut remote)?;
-    rebase_onto_origin(repo, &branch)?;
+    rebase_onto_origin(repo, &branch)
+}
+
+fn sync_and_push(repo: &git2::Repository) -> Result<()> {
+    sync(repo)?;
+
+    let mut remote = match repo.find_remote("origin") {
+        Ok(remote) => remote,
+        Err(_) => return Ok(()), // no remote: nothing to push
+    };
+    let branch = repo
+        .head()?
+        .shorthand()
+        .context("Cannot determine the current branch name")?
+        .to_string();
     push(repo, &mut remote, &branch)
 }
 
