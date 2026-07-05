@@ -28,7 +28,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             commands::list::run(backend.as_ref(), json, config.max_visible_labels())
         }
         Some(Commands::Show { path, json, raw }) => {
-            commands::show::run(backend.as_ref(), &path, json, raw)
+            commands::show::run(backend.as_ref(), &path, json, raw, config.note.max_width)
         }
         Some(Commands::Edit { path }) => commands::edit::run(backend.as_ref(), &path),
         None => {

@@ -21,6 +21,7 @@ pub struct NoteConfig {
     pub daily_filename: Option<String>,
     pub daily_title: Option<String>,
     pub daily_label: Option<String>,
+    pub max_width: Option<usize>,
     pub meta: BTreeMap<String, toml::Value>,
 }
 
@@ -112,6 +113,9 @@ impl Config {
         if other.note.daily_label.is_some() {
             self.note.daily_label = other.note.daily_label;
         }
+        if other.note.max_width.is_some() {
+            self.note.max_width = other.note.max_width;
+        }
         for (key, value) in other.note.meta {
             self.note.meta.insert(key, value);
         }
@@ -193,6 +197,25 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let config = load_from(None, dir.path(), None).unwrap();
         assert_eq!(config.max_visible_labels(), 3);
+    }
+
+    #[test]
+    fn parses_note_max_width() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(".noki.toml"),
+            "repository = \"r\"\n\n[note]\nmax_width = 100\n",
+        )
+        .unwrap();
+        let config = load_from(None, dir.path(), None).unwrap();
+        assert_eq!(config.note.max_width, Some(100));
+    }
+
+    #[test]
+    fn max_width_defaults_to_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = load_from(None, dir.path(), None).unwrap();
+        assert_eq!(config.note.max_width, None);
     }
 
     #[test]

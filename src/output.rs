@@ -5,14 +5,21 @@ use serde::Serialize;
 use tabled::builder::Builder;
 use tabled::settings::object::{Columns, Rows};
 use tabled::settings::style::{HorizontalLine, VerticalLine};
-use tabled::settings::{Color, Modify, Style};
+use tabled::settings::{Color, Modify, Style, Width};
 use tabled::{Table, Tabled};
 
 /// Render a single note as a metadata table followed by its content. `color`
 /// enables ANSI-colored label chips and a rendered Markdown body (disable for
 /// non-terminal output, where the raw Markdown source is emitted instead).
-/// `width` is the column budget for wrapping the rendered body.
-pub fn render_note_human(note: &Note, width: usize, color: bool) -> String {
+/// `width` is the column budget for wrapping the rendered body. `table_width`,
+/// when `Some`, also caps the metadata table to that many columns (used when a
+/// `note.max_width` is configured); `None` leaves the table at its natural width.
+pub fn render_note_human(
+    note: &Note,
+    width: usize,
+    table_width: Option<usize>,
+    color: bool,
+) -> String {
     let mut builder = Builder::default();
     builder.push_record(["title".to_string(), note.meta.title.clone()]);
     builder.push_record(["path".to_string(), note.meta.path.clone()]);
@@ -28,6 +35,9 @@ pub fn render_note_human(note: &Note, width: usize, color: bool) -> String {
     }
     let mut table = builder.build();
     apply_meta_style(&mut table, color);
+    if let Some(max) = table_width {
+        table.with(Width::wrap(max).keep_words(true));
+    }
     let body = if color {
         crate::render::render(&note.content, width, true)
     } else {
@@ -191,7 +201,7 @@ mod tests {
     #[test]
     fn note_human_bold_header_column_when_color() {
         let note = parse_note(RAW).unwrap();
-        let text = render_note_human(&note, 80, true);
+        let text = render_note_human(&note, 80, None, true);
         assert!(
             text.contains("\x1b[1m"),
             "expected bold header-column ANSI in:\n{text}"
@@ -219,7 +229,7 @@ mod tests {
     #[test]
     fn note_human_shows_title_and_content() {
         let note = parse_note(RAW).unwrap();
-        let text = render_note_human(&note, 80, true);
+        let text = render_note_human(&note, 80, None, true);
         assert!(text.contains("My new note"));
         assert!(text.contains("Hello, World!"));
     }
@@ -228,7 +238,7 @@ mod tests {
     fn note_human_shows_extra_meta() {
         let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\nauthor: Paul van der Meijs\n---\n\nBody\n";
         let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note, 80, true);
+        let text = render_note_human(&note, 80, None, true);
         assert!(text.contains("author"), "expected author key in:\n{text}");
         assert!(
             text.contains("Paul van der Meijs"),
@@ -239,7 +249,7 @@ mod tests {
     #[test]
     fn note_human_colors_labels() {
         let note = parse_note(RAW_LABELS).unwrap();
-        let text = render_note_human(&note, 80, true);
+        let text = render_note_human(&note, 80, None, true);
         assert!(text.contains("labels"), "expected labels row in:\n{text}");
         assert!(
             text.contains("\x1b["),
@@ -255,7 +265,7 @@ mod tests {
     #[test]
     fn note_human_without_color_omits_ansi() {
         let note = parse_note(RAW_LABELS).unwrap();
-        let text = render_note_human(&note, 80, false);
+        let text = render_note_human(&note, 80, None, false);
         assert!(!text.contains('\x1b'), "expected no ANSI codes in:\n{text}");
         assert!(text.contains("feature"), "expected label text in:\n{text}");
         assert!(
@@ -268,7 +278,7 @@ mod tests {
     fn note_human_renders_body_when_color() {
         let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\n# Heading\n";
         let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note, 80, true);
+        let text = render_note_human(&note, 80, None, true);
         assert!(
             text.contains("\x1b[1m"),
             "expected rendered bold heading in:\n{text}"
@@ -283,10 +293,45 @@ mod tests {
     fn note_human_keeps_raw_body_when_no_color() {
         let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\n# Heading\n";
         let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note, 80, false);
+        let text = render_note_human(&note, 80, None, false);
         assert!(
             text.contains("# Heading"),
             "expected literal markdown source in:\n{text}"
+        );
+    }
+
+    #[test]
+    fn note_human_caps_meta_table_to_table_width() {
+        // A title far wider than the cap must wrap so no table line exceeds it.
+        let raw = "---\ntitle: An extremely long note title that clearly exceeds the configured maximum width\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nok\n";
+        let note = parse_note(raw).unwrap();
+        let text = render_note_human(&note, 30, Some(30), false);
+        for line in text.lines() {
+            assert!(
+                line.chars().count() <= 30,
+                "line exceeds cap (30): {line:?} in:\n{text}"
+            );
+        }
+        // The full title text is preserved (wrapped, not truncated).
+        assert!(
+            text.contains("An extremely"),
+            "title start missing in:\n{text}"
+        );
+        assert!(
+            text.contains("maximum width"),
+            "title end missing in:\n{text}"
+        );
+    }
+
+    #[test]
+    fn note_human_leaves_meta_table_natural_when_no_cap() {
+        // With table_width None, a long value is not wrapped by us.
+        let raw = "---\ntitle: An extremely long note title that clearly exceeds any small width\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nok\n";
+        let note = parse_note(raw).unwrap();
+        let text = render_note_human(&note, 30, None, false);
+        assert!(
+            text.lines().any(|line| line.chars().count() > 30),
+            "expected an unwrapped (wide) table line with no cap in:\n{text}"
         );
     }
 }
