@@ -31,6 +31,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             commands::show::run(backend.as_ref(), &path, json, raw, config.note.max_width)
         }
         Some(Commands::Edit { path }) => commands::edit::run(backend.as_ref(), &path),
+        Some(Commands::Refresh) => commands::refresh::run(backend.as_ref()),
         None => {
             if cli.daily {
                 commands::daily::run(

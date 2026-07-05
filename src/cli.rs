@@ -57,6 +57,8 @@ pub enum Commands {
         /// The repository-relative path of the note
         path: String,
     },
+    /// Fetch the latest notes from the remote and rebase the local clone
+    Refresh,
 }
 
 #[cfg(test)]
@@ -133,5 +135,11 @@ mod tests {
     fn daily_defaults_to_false() {
         let cli = Cli::parse_from(["noki"]);
         assert!(!cli.daily);
+    }
+
+    #[test]
+    fn parses_refresh_command() {
+        let cli = Cli::parse_from(["noki", "refresh"]);
+        assert!(matches!(cli.command, Some(Commands::Refresh)));
     }
 }
