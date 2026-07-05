@@ -143,6 +143,26 @@ fn rebase_onto_origin(repo: &git2::Repository, branch: &str) -> Result<()> {
         return Ok(());
     }
 
+    // If local is strictly behind upstream (no local-only commits), fast-forward
+    // the branch ref and check out the working tree so on-disk notes match origin.
+    //
+    // The checkout must happen *before* the branch ref moves: a safe checkout
+    // diffs against the current HEAD tree as its baseline, so moving HEAD first
+    // would make the baseline equal the target and defeat the safety check,
+    // silently leaving a dirty conflicting file un-checked-out instead of
+    // erroring. Checking out first (HEAD still pointing at `local`) makes the
+    // safe checkout correctly refuse to clobber uncommitted changes.
+    if repo.graph_descendant_of(upstream.id(), local.id())? {
+        let upstream_object = repo.find_object(upstream.id(), None)?;
+        let mut checkout = git2::build::CheckoutBuilder::new();
+        repo.checkout_tree(&upstream_object, Some(&mut checkout))
+            .context("Refusing to fast-forward: local changes would be overwritten")?;
+        let refname = format!("refs/heads/{branch}");
+        let mut reference = repo.find_reference(&refname)?;
+        reference.set_target(upstream.id(), "noki: fast-forward to origin")?;
+        return Ok(());
+    }
+
     let onto = repo.find_annotated_commit(upstream.id())?;
     let signature = repo.signature()?;
     let mut rebase = repo.rebase(None, Some(&onto), None, None)?;
@@ -354,6 +374,74 @@ mod tests {
                 .unwrap()
                 .parent_count(),
             1
+        );
+    }
+
+    #[test]
+    fn rebase_onto_origin_fast_forwards_when_behind() {
+        let (origin_dir, _seed_dir, seed) = origin_with_seed();
+        let origin_url = origin_dir.path().to_str().unwrap();
+
+        // noki's clone starts at origin's current tip, with no local commits.
+        let workdir = tempfile::tempdir().unwrap();
+        let noki = Repository::clone(origin_url, workdir.path()).unwrap();
+        set_identity(&noki);
+
+        // Origin gains a new note behind noki's back.
+        commit_file(&seed, "remote.md", "remote\n", "remote note");
+        push_master(&seed);
+
+        // Populate refs/remotes/origin/master, then integrate.
+        let mut remote = noki.find_remote("origin").unwrap();
+        fetch_origin(&noki, &mut remote).unwrap();
+        rebase_onto_origin(&noki, "master").unwrap();
+
+        // Local HEAD now matches origin, and the working tree has the new file.
+        let local_head = noki.head().unwrap().peel_to_commit().unwrap().id();
+        let origin_head = noki
+            .find_reference("refs/remotes/origin/master")
+            .unwrap()
+            .peel_to_commit()
+            .unwrap()
+            .id();
+        assert_eq!(local_head, origin_head);
+        assert_eq!(
+            std::fs::read_to_string(workdir.path().join("remote.md")).unwrap(),
+            "remote\n"
+        );
+    }
+
+    #[test]
+    fn rebase_onto_origin_does_not_clobber_uncommitted_changes_when_behind() {
+        let (origin_dir, _seed_dir, seed) = origin_with_seed();
+        let origin_url = origin_dir.path().to_str().unwrap();
+
+        // noki's clone starts at origin's tip (seed.txt == "seed\n"), no local commits.
+        let workdir = tempfile::tempdir().unwrap();
+        let noki = Repository::clone(origin_url, workdir.path()).unwrap();
+        set_identity(&noki);
+
+        // Origin changes seed.txt behind noki's back.
+        commit_file(&seed, "seed.txt", "origin change\n", "remote edit");
+        push_master(&seed);
+
+        // noki has an uncommitted local edit to the same file.
+        std::fs::write(workdir.path().join("seed.txt"), "local uncommitted\n").unwrap();
+
+        // Fetch, then attempt the fast-forward: a safe checkout must refuse to
+        // overwrite the uncommitted edit and return an error.
+        let mut remote = noki.find_remote("origin").unwrap();
+        fetch_origin(&noki, &mut remote).unwrap();
+        let result = rebase_onto_origin(&noki, "master");
+
+        assert!(
+            result.is_err(),
+            "expected fast-forward to error on a dirty conflicting tree"
+        );
+        // The local uncommitted change is preserved, not clobbered.
+        assert_eq!(
+            std::fs::read_to_string(workdir.path().join("seed.txt")).unwrap(),
+            "local uncommitted\n"
         );
     }
 
