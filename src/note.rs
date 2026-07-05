@@ -57,8 +57,8 @@ pub fn to_raw(note: &Note) -> Result<String> {
     Ok(format!("---\n{yaml}---\n\n{}", note.content))
 }
 
-pub const DEFAULT_FILENAME: &str = "%Y/%m/%d/%H:%M:%S-%title";
-pub const DEFAULT_DAILY_FILENAME: &str = "%Y/%m/%d";
+pub const DEFAULT_FILENAME: &str = "{created:%Y/%m/%d/%H-%M-%S}-{title}";
+pub const DEFAULT_DAILY_FILENAME: &str = "{created:%Y/%m/%d}";
 pub const DEFAULT_DAILY_TITLE: &str = "Daily note for %Y-%m-%d";
 pub const DEFAULT_DAILY_LABEL: &str = "daily";
 
@@ -97,13 +97,20 @@ pub fn title_from_content(content: &str) -> String {
     "untitled".to_string()
 }
 
-/// Render a note's relative path from a template. `%title` is replaced with a
-/// slug of the title; all other `%` specifiers are `chrono` date formats.
-/// The `.md` extension is always appended.
-pub fn note_path(template: &str, title: &str, when: DateTime<FixedOffset>) -> String {
-    let slug = slug::slugify(title);
-    let with_title = template.replace("%title", &slug);
-    format!("{}.md", when.format(&with_title))
+/// Render a relative note path from a flat template (`{field}` / `{field:fmt}`)
+/// against the note's `title`, `labels`, static config `meta`, and timestamp
+/// `when`; the `.md` extension is appended. Errors on an invalid template.
+pub fn note_path(
+    template: &str,
+    title: &str,
+    labels: &[String],
+    meta: &BTreeMap<String, toml::Value>,
+    when: DateTime<FixedOffset>,
+) -> Result<String> {
+    let rendered = crate::template::render(template, |name| {
+        resolve_field(name, title, labels, meta, when)
+    })?;
+    Ok(format!("{rendered}.md"))
 }
 
 /// Parse options with the frontmatter construct enabled (GFM otherwise).
@@ -159,6 +166,35 @@ pub(crate) mod rfc3339 {
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<DateTime<FixedOffset>, D::Error> {
         let s = String::deserialize(d)?;
         DateTime::parse_from_rfc3339(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Resolve a template field for `note_path`: built-in `title`/`created`/
+/// `updated`/`labels`, else a static config meta value. An absent key returns
+/// `None`, which the engine renders as `unknown-<field>`.
+fn resolve_field(
+    name: &str,
+    title: &str,
+    labels: &[String],
+    meta: &BTreeMap<String, toml::Value>,
+    when: DateTime<FixedOffset>,
+) -> Option<crate::template::Field> {
+    use crate::template::Field;
+    match name {
+        "title" => Some(Field::Text(title.to_string())),
+        "created" | "updated" => Some(Field::Date(when)),
+        "labels" => Some(Field::Text(labels.join(" "))),
+        other => meta
+            .get(other)
+            .map(|value| Field::Text(meta_value_string(value))),
+    }
+}
+
+/// Stringify a TOML meta value for use in a path (slugified later by the engine).
+fn meta_value_string(value: &toml::Value) -> String {
+    match value {
+        toml::Value::String(text) => text.clone(),
+        other => other.to_string(),
     }
 }
 
@@ -234,8 +270,36 @@ mod tests {
     #[test]
     fn note_path_expands_date_and_slugged_title() {
         let when = at("2026-06-02T10:00:00+01:00");
-        let path = note_path(DEFAULT_FILENAME, "My new note", when);
-        assert_eq!(path, "2026/06/02/10:00:00-my-new-note.md");
+        let path = note_path(DEFAULT_FILENAME, "My new note", &[], &BTreeMap::new(), when).unwrap();
+        assert_eq!(path, "2026/06/02/10-00-00-my-new-note.md");
+    }
+
+    #[test]
+    fn note_path_interpolates_meta_and_labels() {
+        let when = at("2026-06-02T10:00:00+01:00");
+        let mut meta = BTreeMap::new();
+        meta.insert(
+            "author".to_string(),
+            toml::Value::String("Paul van der Meijs".to_string()),
+        );
+        let labels = vec!["Work".to_string(), "Meeting".to_string()];
+        let path = note_path("{author}/{labels}/{title}", "My Note", &labels, &meta, when).unwrap();
+        assert_eq!(path, "paul-van-der-meijs/work-meeting/my-note.md");
+    }
+
+    #[test]
+    fn note_path_missing_meta_defaults_to_unknown() {
+        let when = at("2026-06-02T10:00:00+01:00");
+        // `author` isn't in meta, and there are no labels → `unknown-<field>`.
+        let path = note_path(
+            "{author}/{labels}/{title}",
+            "My Note",
+            &[],
+            &BTreeMap::new(),
+            when,
+        )
+        .unwrap();
+        assert_eq!(path, "unknown-author/unknown-labels/my-note.md");
     }
 
     #[test]
@@ -289,7 +353,7 @@ mod tests {
     #[test]
     fn note_path_daily_template_has_no_title() {
         let when = at("2026-07-03T09:00:00+02:00");
-        let path = note_path(DEFAULT_DAILY_FILENAME, "", when);
+        let path = note_path(DEFAULT_DAILY_FILENAME, "", &[], &BTreeMap::new(), when).unwrap();
         assert_eq!(path, "2026/07/03.md");
     }
 }
