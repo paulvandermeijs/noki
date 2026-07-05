@@ -2,9 +2,6 @@
 
 A version control powered, AI friendly note taking app.
 
-> [!WARNING]
-> Early work in progress.
-
 ## About
 
 Nōki stores your notes as plain files under version control, so every change
