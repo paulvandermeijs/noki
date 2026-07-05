@@ -7,6 +7,16 @@ description: Find, read, and reason over the user's noki notes by driving noki's
 
 noki stores notes as Markdown files in a git-backed repo and can print them as JSON. Always drive it **structured** — the human output is colored, width-dependent, truncates labels, and renders the Markdown body (wrapped, ANSI-styled), so parse `--json` (or `--raw` for the exact source) instead of scraping it.
 
+## Sync before reading
+
+`noki ls` and `noki show` read the **local clone's working tree**, which only syncs with the remote when you *write* a note. If notes may have been added or edited elsewhere (another machine, the web UI), run:
+
+```sh
+noki refresh
+```
+
+first. It fetches from the remote and rebases the local clone onto it (no push), so subsequent `ls`/`show` see the latest. It prints `Refreshed.` on success and exits non-zero (with a message) if the remote is unreachable or a local change conflicts.
+
 ## List notes
 
 ```sh
