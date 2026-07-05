@@ -12,17 +12,15 @@ is tracked, diffable, and recoverable. An agent-friendly CLI, with piped
 input and structured output, makes your notes easy for AI tools to drive,
 search, and reason over.
 
-## Building
+## Installation
+
+Install from [crates.io](https://crates.io/crates/noki) (requires a Rust toolchain):
 
 ```sh
-cargo build
+cargo install noki
 ```
 
-## Running
-
-```sh
-cargo run
-```
+This puts the `noki` binary on your `PATH`. Upgrade later with `cargo install noki --force`.
 
 ## Usage
 
