@@ -334,4 +334,43 @@ mod tests {
             "expected an unwrapped (wide) table line with no cap in:\n{text}"
         );
     }
+
+    #[test]
+    fn note_human_caps_colored_table_by_visible_width() {
+        // With color on, the table carries ANSI (bold keys, colored label chips);
+        // capping must measure *visible* width, so no line exceeds the cap once
+        // escape sequences are stripped.
+        let raw = "---\ntitle: An extremely long note title that clearly exceeds the configured maximum width\npath: p.md\nlabels:\n- feature\n- backend\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nok\n";
+        let note = parse_note(raw).unwrap();
+        let text = render_note_human(&note, 40, Some(40), true);
+        assert!(
+            text.contains('\x1b'),
+            "expected ANSI in colored output:\n{text}"
+        );
+        for line in text.lines() {
+            assert!(
+                visible_width(line) <= 40,
+                "visible width exceeds cap (40): {:?} in:\n{text}",
+                line
+            );
+        }
+    }
+
+    /// Visible column count of a line, ignoring ANSI CSI SGR (`\x1b[…m`) escapes.
+    fn visible_width(line: &str) -> usize {
+        let mut width = 0;
+        let mut chars = line.chars();
+        while let Some(ch) = chars.next() {
+            if ch == '\x1b' {
+                for esc in chars.by_ref() {
+                    if esc == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                width += 1;
+            }
+        }
+        width
+    }
 }
