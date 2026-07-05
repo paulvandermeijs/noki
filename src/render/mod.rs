@@ -43,12 +43,11 @@ fn block(node: &Node, width: usize, color: bool) -> String {
 }
 
 fn heading(h: &Heading, width: usize, color: bool) -> String {
+    // Headings are bold. Underline is reserved for links and explicit markup,
+    // not used as a heading decoration.
     let mut body = spans(&h.children);
     for span in &mut body {
         span.style.bold = true;
-        if h.depth == 1 {
-            span.style.underline = true;
-        }
     }
     let hashes = Span {
         text: format!("{} ", "#".repeat(h.depth as usize)),
@@ -196,12 +195,13 @@ mod tests {
     }
 
     #[test]
-    fn h1_is_bold_and_underlined() {
-        // A level-1 heading merges bold+underline into one SGR sequence.
+    fn h1_is_bold_without_underline() {
+        // A level-1 heading is bold only — no underline decoration.
         let out = render("# Hi", 80, true);
+        assert!(out.contains("\x1b[1m"), "expected bold in {out:?}");
         assert!(
-            out.contains("\x1b[1;4m"),
-            "expected bold+underline in {out:?}"
+            !out.contains("\x1b[1;4m") && !out.contains("\x1b[4m"),
+            "expected no underline in {out:?}"
         );
         assert!(out.contains("Hi"));
     }

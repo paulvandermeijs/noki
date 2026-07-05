@@ -228,6 +228,23 @@ mod tests {
     }
 
     #[test]
+    fn link_is_underlined_and_blue() {
+        // Underline is reserved for links (browser-like) and explicit markup.
+        let link = Span {
+            text: "text".to_string(),
+            style: Style {
+                link: true,
+                ..Style::default()
+            },
+        };
+        let out = emit(&[link], true);
+        assert!(
+            out.contains("\x1b[4;34m"),
+            "link should be underlined + blue: {out:?}"
+        );
+    }
+
+    #[test]
     fn soft_break_becomes_space() {
         let sp = spans(&inline("a\nb"));
         let joined: String = sp.iter().map(|s| s.text.as_str()).collect();
