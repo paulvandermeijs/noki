@@ -8,18 +8,34 @@ use tabled::settings::style::{HorizontalLine, VerticalLine};
 use tabled::settings::{Color, Modify, Style, Width};
 use tabled::{Table, Tabled};
 
+/// How to size the metadata table (and the body wrap width) in `show` output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableWidth {
+    /// Shrink the table to its content, but never wider than this many columns.
+    /// Used when no `note.max_width` is set — the bound is the terminal width.
+    Fit(usize),
+    /// Force the table to exactly this many columns. Used when `note.max_width`
+    /// is set (already clamped to the terminal width).
+    Fixed(usize),
+}
+
+impl TableWidth {
+    /// The column budget shared by the body wrap width and the table target.
+    fn columns(self) -> usize {
+        match self {
+            TableWidth::Fit(width) | TableWidth::Fixed(width) => width,
+        }
+    }
+}
+
 /// Render a single note as a metadata table followed by its content. `color`
 /// enables ANSI-colored label chips and a rendered Markdown body (disable for
 /// non-terminal output, where the raw Markdown source is emitted instead).
-/// `width` is the column budget for wrapping the rendered body. `table_width`,
-/// when `Some`, also caps the metadata table to that many columns (used when a
-/// `note.max_width` is configured); `None` leaves the table at its natural width.
-pub fn render_note_human(
-    note: &Note,
-    width: usize,
-    table_width: Option<usize>,
-    color: bool,
-) -> String {
+/// `table_width` sets the column budget: the body always wraps to that width,
+/// and the metadata table either shrinks-to-fit within it ([`TableWidth::Fit`])
+/// or is forced to exactly it ([`TableWidth::Fixed`]).
+pub fn render_note_human(note: &Note, table_width: TableWidth, color: bool) -> String {
+    let width = table_width.columns();
     let mut builder = Builder::default();
     builder.push_record(["title".to_string(), note.meta.title.clone()]);
     builder.push_record(["path".to_string(), note.meta.path.clone()]);
@@ -35,8 +51,10 @@ pub fn render_note_human(
     }
     let mut table = builder.build();
     apply_meta_style(&mut table, color);
-    if let Some(max) = table_width {
-        table.with(Width::wrap(max).keep_words(true));
+    // Always keep the table within the budget; only pad up to it when Fixed.
+    table.with(Width::wrap(width).keep_words(true));
+    if let TableWidth::Fixed(width) = table_width {
+        table.with(Width::increase(width));
     }
     let body = if color {
         crate::render::render(&note.content, width, true)
@@ -201,7 +219,7 @@ mod tests {
     #[test]
     fn note_human_bold_header_column_when_color() {
         let note = parse_note(RAW).unwrap();
-        let text = render_note_human(&note, 80, None, true);
+        let text = render_note_human(&note, TableWidth::Fit(80), true);
         assert!(
             text.contains("\x1b[1m"),
             "expected bold header-column ANSI in:\n{text}"
@@ -229,7 +247,7 @@ mod tests {
     #[test]
     fn note_human_shows_title_and_content() {
         let note = parse_note(RAW).unwrap();
-        let text = render_note_human(&note, 80, None, true);
+        let text = render_note_human(&note, TableWidth::Fit(80), true);
         assert!(text.contains("My new note"));
         assert!(text.contains("Hello, World!"));
     }
@@ -238,7 +256,7 @@ mod tests {
     fn note_human_shows_extra_meta() {
         let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\nauthor: Paul van der Meijs\n---\n\nBody\n";
         let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note, 80, None, true);
+        let text = render_note_human(&note, TableWidth::Fit(80), true);
         assert!(text.contains("author"), "expected author key in:\n{text}");
         assert!(
             text.contains("Paul van der Meijs"),
@@ -249,7 +267,7 @@ mod tests {
     #[test]
     fn note_human_colors_labels() {
         let note = parse_note(RAW_LABELS).unwrap();
-        let text = render_note_human(&note, 80, None, true);
+        let text = render_note_human(&note, TableWidth::Fit(80), true);
         assert!(text.contains("labels"), "expected labels row in:\n{text}");
         assert!(
             text.contains("\x1b["),
@@ -265,7 +283,7 @@ mod tests {
     #[test]
     fn note_human_without_color_omits_ansi() {
         let note = parse_note(RAW_LABELS).unwrap();
-        let text = render_note_human(&note, 80, None, false);
+        let text = render_note_human(&note, TableWidth::Fit(80), false);
         assert!(!text.contains('\x1b'), "expected no ANSI codes in:\n{text}");
         assert!(text.contains("feature"), "expected label text in:\n{text}");
         assert!(
@@ -278,7 +296,7 @@ mod tests {
     fn note_human_renders_body_when_color() {
         let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\n# Heading\n";
         let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note, 80, None, true);
+        let text = render_note_human(&note, TableWidth::Fit(80), true);
         assert!(
             text.contains("\x1b[1m"),
             "expected rendered bold heading in:\n{text}"
@@ -293,7 +311,7 @@ mod tests {
     fn note_human_keeps_raw_body_when_no_color() {
         let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\n# Heading\n";
         let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note, 80, None, false);
+        let text = render_note_human(&note, TableWidth::Fit(80), false);
         assert!(
             text.contains("# Heading"),
             "expected literal markdown source in:\n{text}"
@@ -301,18 +319,32 @@ mod tests {
     }
 
     #[test]
-    fn note_human_caps_meta_table_to_table_width() {
-        // A title far wider than the cap must wrap so no table line exceeds it.
+    fn note_human_fixed_forces_exact_width() {
+        // Fixed pads a short table up to exactly the requested width.
+        let note = parse_note(RAW).unwrap();
+        let text = render_note_human(&note, TableWidth::Fixed(60), false);
+        let top = text.lines().next().unwrap();
+        assert_eq!(
+            top.chars().count(),
+            60,
+            "top border should be exactly 60 wide, was {}: {top:?}",
+            top.chars().count()
+        );
+    }
+
+    #[test]
+    fn note_human_fixed_wraps_long_content_to_width() {
+        // Fixed also shrinks over-wide content: no line exceeds the width, and
+        // the long title is wrapped (preserved), not truncated.
         let raw = "---\ntitle: An extremely long note title that clearly exceeds the configured maximum width\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nok\n";
         let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note, 30, Some(30), false);
+        let text = render_note_human(&note, TableWidth::Fixed(30), false);
         for line in text.lines() {
             assert!(
                 line.chars().count() <= 30,
-                "line exceeds cap (30): {line:?} in:\n{text}"
+                "line exceeds width (30): {line:?} in:\n{text}"
             );
         }
-        // The full title text is preserved (wrapped, not truncated).
         assert!(
             text.contains("An extremely"),
             "title start missing in:\n{text}"
@@ -324,25 +356,39 @@ mod tests {
     }
 
     #[test]
-    fn note_human_leaves_meta_table_natural_when_no_cap() {
-        // With table_width None, a long value is not wrapped by us.
-        let raw = "---\ntitle: An extremely long note title that clearly exceeds any small width\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nok\n";
-        let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note, 30, None, false);
+    fn note_human_fit_shrinks_to_content_not_padded() {
+        // Fit never pads: a short table stays far narrower than a large bound.
+        let note = parse_note(RAW).unwrap();
+        let text = render_note_human(&note, TableWidth::Fit(200), false);
+        let widest = text.lines().map(|line| line.chars().count()).max().unwrap();
         assert!(
-            text.lines().any(|line| line.chars().count() > 30),
-            "expected an unwrapped (wide) table line with no cap in:\n{text}"
+            widest < 100,
+            "Fit should adapt to content, not pad to 200; widest was {widest} in:\n{text}"
         );
     }
 
     #[test]
-    fn note_human_caps_colored_table_by_visible_width() {
+    fn note_human_fit_caps_over_wide_content() {
+        // Fit still bounds content that exceeds the width.
+        let raw = "---\ntitle: An extremely long note title that clearly exceeds any small width\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nok\n";
+        let note = parse_note(raw).unwrap();
+        let text = render_note_human(&note, TableWidth::Fit(30), false);
+        for line in text.lines() {
+            assert!(
+                line.chars().count() <= 30,
+                "line exceeds bound (30): {line:?} in:\n{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn note_human_fixed_colored_table_by_visible_width() {
         // With color on, the table carries ANSI (bold keys, colored label chips);
-        // capping must measure *visible* width, so no line exceeds the cap once
-        // escape sequences are stripped.
+        // sizing must measure *visible* width, so no line exceeds it once escape
+        // sequences are stripped.
         let raw = "---\ntitle: An extremely long note title that clearly exceeds the configured maximum width\npath: p.md\nlabels:\n- feature\n- backend\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nok\n";
         let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note, 40, Some(40), true);
+        let text = render_note_human(&note, TableWidth::Fixed(40), true);
         assert!(
             text.contains('\x1b'),
             "expected ANSI in colored output:\n{text}"
@@ -350,7 +396,7 @@ mod tests {
         for line in text.lines() {
             assert!(
                 visible_width(line) <= 40,
-                "visible width exceeds cap (40): {:?} in:\n{text}",
+                "visible width exceeds width (40): {:?} in:\n{text}",
                 line
             );
         }

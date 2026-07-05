@@ -5,9 +5,10 @@ use crate::output;
 use crate::vcs::VersionControl;
 use anyhow::Result;
 
-/// Show a single note identified by its repository-relative path. `max_width`,
-/// when `Some`, caps both the rendered body and the metadata table to that many
-/// columns (from `note.max_width`); `None` uses the full terminal width.
+/// Show a single note identified by its repository-relative path. `max_width`
+/// (from `note.max_width`), when `Some`, forces both the rendered body and the
+/// metadata table to that many columns, clamped down to the terminal width;
+/// `None` adapts to content up to the terminal width.
 pub fn run(
     vcs: &dyn VersionControl,
     path: &str,
@@ -26,20 +27,25 @@ pub fn run(
     let rendered = if json {
         output::render_note_json(&note)?
     } else {
-        let width = cap_width(terminal_width(), max_width);
-        let table_width = max_width.map(|_| width);
-        output::render_note_human(&note, width, table_width, stdout().is_terminal())
+        output::render_note_human(&note, table_width(max_width), stdout().is_terminal())
     };
     println!("{rendered}");
     Ok(())
 }
 
-/// The effective wrap width: the smaller of the available width and a configured
-/// cap, or the full available width when no cap is set.
-fn cap_width(available: usize, max_width: Option<usize>) -> usize {
+/// Resolve the column budget for `show` from the configured `max_width` and the
+/// current terminal width.
+fn table_width(max_width: Option<usize>) -> output::TableWidth {
+    table_width_for(terminal_width(), max_width)
+}
+
+/// Decide the table sizing given the `available` terminal columns: a configured
+/// cap (clamped to `available`, floored at 1) yields a fixed width; no cap
+/// adapts to content up to `available`.
+fn table_width_for(available: usize, max_width: Option<usize>) -> output::TableWidth {
     match max_width {
-        Some(cap) => available.min(cap.max(1)),
-        None => available,
+        Some(cap) => output::TableWidth::Fixed(available.min(cap.max(1))),
+        None => output::TableWidth::Fit(available),
     }
 }
 
@@ -88,18 +94,21 @@ mod tests {
     }
 
     #[test]
-    fn cap_width_uses_available_when_no_cap() {
-        assert_eq!(cap_width(120, None), 120);
+    fn table_width_fits_available_when_no_cap() {
+        assert_eq!(table_width_for(120, None), output::TableWidth::Fit(120));
     }
 
     #[test]
-    fn cap_width_caps_to_smaller_of_available_and_max() {
-        assert_eq!(cap_width(120, Some(80)), 80);
-        assert_eq!(cap_width(50, Some(80)), 50);
+    fn table_width_fixes_to_smaller_of_available_and_cap() {
+        assert_eq!(
+            table_width_for(120, Some(80)),
+            output::TableWidth::Fixed(80)
+        );
+        assert_eq!(table_width_for(50, Some(80)), output::TableWidth::Fixed(50));
     }
 
     #[test]
-    fn cap_width_never_returns_zero() {
-        assert_eq!(cap_width(120, Some(0)), 1);
+    fn table_width_never_fixes_to_zero() {
+        assert_eq!(table_width_for(120, Some(0)), output::TableWidth::Fixed(1));
     }
 }

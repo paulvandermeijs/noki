@@ -36,8 +36,9 @@ filename = "%Y/%m/%d/%H:%M:%S-%title"
 daily_filename = "%Y/%m/%d"
 daily_title = "Daily note for %Y-%m-%d"
 daily_label = "daily"
-# Cap the width of `show`'s rendered body and metadata table, in columns
-# (default: unset — use the full terminal width)
+# Render `show` at a fixed width, in columns: the body wraps at it and the
+# metadata table is sized to it (clamped down to the terminal width when the
+# terminal is narrower). Default: unset — adapt to content up to terminal width.
 max_width = 100
 meta = { author = "Your Name" }
 
@@ -92,10 +93,12 @@ noki show 2026/06/02/10:00:00-my-new-note.md --json
 noki show 2026/06/02/10:00:00-my-new-note.md --raw
 ```
 
-In a terminal, `show` renders the note's Markdown body as styled text wrapped to
-the terminal width (or to `note.max_width`, if set — which also caps the
-metadata table). Piped or redirected output emits the raw Markdown source
-unchanged; `--json` and `--raw` are always unformatted.
+In a terminal, `show` renders the note's Markdown body as styled text. Without
+`note.max_width` it wraps to the terminal width and the metadata table adapts to
+its content; with `note.max_width` set it renders at that fixed width instead —
+the body wraps at it and the metadata table is sized to it — clamped down to the
+terminal width when the terminal is narrower. Piped or redirected output emits
+the raw Markdown source unchanged; `--json` and `--raw` are always unformatted.
 
 Edit an existing note (opens your editor with the note's body; on save the
 `updated` timestamp is refreshed while `created` is preserved, and the title,
