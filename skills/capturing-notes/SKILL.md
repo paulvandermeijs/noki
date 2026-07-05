@@ -71,10 +71,11 @@ VISUAL=/tmp/noki-edit.sh noki edit "2026/06/02/10:00:00-sprint-planning.md"
 
 noki then re-saves the note: it refreshes `updated`, preserves `created`, and keeps the title, labels, and other frontmatter — then commits and pushes like any capture. (For a quick mechanical change your script can run `sed` on `"$1"` instead — but note in-place `sed` differs across platforms: `sed -i ''` on macOS vs `sed -i` on GNU/Linux — which is why replacing the whole body is more reliable.)
 
-Two things to get right:
+Three things to get right:
 
 - **noki checks `$VISUAL` before `$EDITOR`.** Many shells already set `$VISUAL` (to `vim`, `hx`, …), and that would win and open an interactive editor that hangs. Set **`VISUAL`** to your script; setting only `EDITOR` won't help when `VISUAL` is already set.
 - **The script sees the body only** — the temp file has no frontmatter. Don't try to rewrite `title:` or `labels:` this way; those are managed by noki, and `created`/`updated` are handled for you.
+- **The script must exit 0.** A non-zero exit aborts the capture: noki errors with "Editor exited with …; the note was not saved" and writes nothing. (This also means a script can deliberately `exit 1` to cancel an edit.)
 
 ## A push warning is not a failure
 
