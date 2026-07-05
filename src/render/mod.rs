@@ -3,3 +3,4 @@
 #![allow(dead_code)]
 
 mod inline;
+mod wrap;
