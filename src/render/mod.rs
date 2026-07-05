@@ -49,6 +49,9 @@ fn heading(h: &Heading, width: usize, color: bool) -> String {
     let mut body = spans(&h.children);
     for span in &mut body {
         span.style.bold = true;
+        if h.depth == 1 {
+            span.style.underline = true;
+        }
     }
     let hashes = Span {
         text: format!("{} ", "#".repeat(h.depth as usize)),
@@ -189,8 +192,20 @@ mod tests {
 
     #[test]
     fn heading_is_bold() {
-        let out = render("# Hi", 80, true);
+        // A level-2 heading is bold (only), emitting a plain bold SGR.
+        let out = render("## Hi", 80, true);
         assert!(out.contains("\x1b[1m"), "expected bold in {out:?}");
+        assert!(out.contains("Hi"));
+    }
+
+    #[test]
+    fn h1_is_bold_and_underlined() {
+        // A level-1 heading merges bold+underline into one SGR sequence.
+        let out = render("# Hi", 80, true);
+        assert!(
+            out.contains("\x1b[1;4m"),
+            "expected bold+underline in {out:?}"
+        );
         assert!(out.contains("Hi"));
     }
 
