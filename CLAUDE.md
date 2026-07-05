@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Noki is a CLI that captures Markdown notes into a Git-backed repository. Notes are Markdown files with YAML frontmatter, committed and pushed to a configured remote.
+Nōki is a CLI that captures Markdown notes into a Git-backed repository. Notes are Markdown files with YAML frontmatter, committed and pushed to a configured remote.
 
 ## Commands
 
@@ -32,7 +32,8 @@ The crate is a **library (`src/lib.rs`) plus a thin binary (`src/main.rs`)**. `m
 
 ## Conventions
 
-- **Errors use `anyhow` throughout, including the library — this is deliberate**, not an oversight. Noki's lib is the binary's internals; nothing branches on error kinds, so `thiserror` earns nothing here. Keep using `anyhow::Result` with `.context(...)`.
+- **The name is stylized `Nōki` in prose, but the CLI is always `noki`.** Use `Nōki` when referring to the project by name in documentation; use lowercase `noki` for the command, binary, crate/package name, `.noki.toml`, and any code or shell example.
+- **Errors use `anyhow` throughout, including the library — this is deliberate**, not an oversight. Nōki's lib is the binary's internals; nothing branches on error kinds, so `thiserror` earns nothing here. Keep using `anyhow::Result` with `.context(...)`.
 - **No `unwrap()`/`expect()`/`panic!`/`unreachable!` in non-test code**, with one justified `expect()` in `collect_notes` (path is provably within the repo root). Tests may `unwrap()` freely.
 - **Public API at the top of each file, private helpers at the bottom** (a global rule for this author).
 - TDD is the norm: write the failing test, make it pass, then commit. Implementation plans live in `docs/superpowers/plans/`.

@@ -1,4 +1,4 @@
-# Noki
+# Nōki
 
 A version control powered, AI friendly note taking app.
 
@@ -7,7 +7,7 @@ A version control powered, AI friendly note taking app.
 
 ## About
 
-Noki stores your notes as plain files under version control, so every change
+Nōki stores your notes as plain files under version control, so every change
 is tracked, diffable, and recoverable. An agent-friendly CLI, with piped
 input and structured output, makes your notes easy for AI tools to drive,
 search, and reason over.
@@ -115,7 +115,7 @@ noki edit 2026/06/02/10:00:00-my-new-note.md
 
 ## Agent skills
 
-Noki ships with two [agent skills](skills/) that teach an AI coding agent (Claude
+Nōki ships with two [agent skills](skills/) that teach an AI coding agent (Claude
 Code or compatible) how to drive the CLI:
 
 - [`capturing-notes`](skills/capturing-notes/SKILL.md) — capturing notes
@@ -128,6 +128,11 @@ Code or compatible) how to drive the CLI:
 Install them by copying the relevant `skills/<name>/` directory into your agent's
 skills location (e.g. `.claude/skills/`). Each `evals/` folder holds the test
 prompts used to validate the skill.
+
+## About the name
+
+Nōki is a portmanteau of **no**tes and wi**ki** — but it's pronounced like the
+Limp Bizkit song.
 
 ## License
 
