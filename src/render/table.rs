@@ -28,6 +28,8 @@ pub(crate) fn render_table(table: &Table, color: bool) -> String {
     out.to_string()
 }
 
+/// Style the rendered table: an outer frame with a double-line header rule
+/// but no vertical column separators. Headers are bold when `color`.
 fn apply_style(table: &mut TabledTable, align: &[AlignKind], color: bool) {
     let header_rule = HorizontalLine::inherit(Style::extended())
         .remove_intersection()

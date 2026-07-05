@@ -113,6 +113,30 @@ fn collect(nodes: &[Node], base: Style, out: &mut Vec<Span>) {
                     style,
                 });
             }
+            Node::LinkReference(l) => {
+                let mut style = base;
+                style.link = true;
+                collect(&l.children, style, out);
+            }
+            Node::ImageReference(i) => {
+                let mut style = base;
+                style.dim = true;
+                out.push(Span {
+                    text: format!("[image: {}]", i.alt),
+                    style,
+                });
+            }
+            Node::FootnoteReference(f) => {
+                let mut style = base;
+                style.dim = true;
+                out.push(Span {
+                    text: format!(
+                        "[^{}]",
+                        f.label.clone().unwrap_or_else(|| f.identifier.clone())
+                    ),
+                    style,
+                });
+            }
             other => {
                 if let Some(children) = other.children() {
                     collect(children, base, out);
@@ -243,5 +267,36 @@ mod tests {
             false,
         );
         assert_eq!(out, "hi");
+    }
+
+    #[test]
+    fn link_reference_gets_link_style() {
+        let sp = spans(&inline("[text][ref]\n\n[ref]: https://example.com"));
+        assert!(
+            sp.iter().any(|s| s.text == "text" && s.style.link),
+            "expected link-styled reference text in {:?}",
+            sp.iter().map(|s| &s.text).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn image_reference_shows_dim_placeholder() {
+        let sp = spans(&inline("![alt][ref]\n\n[ref]: https://example.com/i.png"));
+        assert!(
+            sp.iter()
+                .any(|s| s.text.contains("[image: alt]") && s.style.dim),
+            "expected dim image placeholder in {:?}",
+            sp.iter().map(|s| &s.text).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn footnote_reference_shows_dim_marker() {
+        let sp = spans(&inline("a[^1]\n\n[^1]: the note"));
+        assert!(
+            sp.iter().any(|s| s.text.contains("[^1]") && s.style.dim),
+            "expected dim footnote marker in {:?}",
+            sp.iter().map(|s| &s.text).collect::<Vec<_>>()
+        );
     }
 }
