@@ -18,7 +18,7 @@ pub fn run(vcs: &dyn VersionControl, path: &str, json: bool, raw: bool) -> Resul
     let rendered = if json {
         output::render_note_json(&note)?
     } else {
-        output::render_note_human(&note, stdout().is_terminal())
+        output::render_note_human(&note, 80, stdout().is_terminal())
     };
     println!("{rendered}");
     Ok(())

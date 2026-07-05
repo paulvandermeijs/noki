@@ -9,8 +9,10 @@ use tabled::settings::{Color, Modify, Style};
 use tabled::{Table, Tabled};
 
 /// Render a single note as a metadata table followed by its content. `color`
-/// enables ANSI-colored label chips (disable for non-terminal output).
-pub fn render_note_human(note: &Note, color: bool) -> String {
+/// enables ANSI-colored label chips and a rendered Markdown body (disable for
+/// non-terminal output, where the raw Markdown source is emitted instead).
+/// `width` is the column budget for wrapping the rendered body.
+pub fn render_note_human(note: &Note, width: usize, color: bool) -> String {
     let mut builder = Builder::default();
     builder.push_record(["title".to_string(), note.meta.title.clone()]);
     builder.push_record(["path".to_string(), note.meta.path.clone()]);
@@ -26,7 +28,12 @@ pub fn render_note_human(note: &Note, color: bool) -> String {
     }
     let mut table = builder.build();
     apply_meta_style(&mut table, color);
-    format!("{table}\n\n{}", note.content)
+    let body = if color {
+        crate::render::render(&note.content, width, true)
+    } else {
+        note.content.clone()
+    };
+    format!("{table}\n\n{body}")
 }
 
 /// Render a single note as pretty JSON (`{ "meta": {...}, "content": "..." }`).
@@ -184,7 +191,7 @@ mod tests {
     #[test]
     fn note_human_bold_header_column_when_color() {
         let note = parse_note(RAW).unwrap();
-        let text = render_note_human(&note, true);
+        let text = render_note_human(&note, 80, true);
         assert!(
             text.contains("\x1b[1m"),
             "expected bold header-column ANSI in:\n{text}"
@@ -212,7 +219,7 @@ mod tests {
     #[test]
     fn note_human_shows_title_and_content() {
         let note = parse_note(RAW).unwrap();
-        let text = render_note_human(&note, true);
+        let text = render_note_human(&note, 80, true);
         assert!(text.contains("My new note"));
         assert!(text.contains("Hello, World!"));
     }
@@ -221,7 +228,7 @@ mod tests {
     fn note_human_shows_extra_meta() {
         let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\nauthor: Paul van der Meijs\n---\n\nBody\n";
         let note = parse_note(raw).unwrap();
-        let text = render_note_human(&note, true);
+        let text = render_note_human(&note, 80, true);
         assert!(text.contains("author"), "expected author key in:\n{text}");
         assert!(
             text.contains("Paul van der Meijs"),
@@ -232,7 +239,7 @@ mod tests {
     #[test]
     fn note_human_colors_labels() {
         let note = parse_note(RAW_LABELS).unwrap();
-        let text = render_note_human(&note, true);
+        let text = render_note_human(&note, 80, true);
         assert!(text.contains("labels"), "expected labels row in:\n{text}");
         assert!(
             text.contains("\x1b["),
@@ -248,12 +255,38 @@ mod tests {
     #[test]
     fn note_human_without_color_omits_ansi() {
         let note = parse_note(RAW_LABELS).unwrap();
-        let text = render_note_human(&note, false);
+        let text = render_note_human(&note, 80, false);
         assert!(!text.contains('\x1b'), "expected no ANSI codes in:\n{text}");
         assert!(text.contains("feature"), "expected label text in:\n{text}");
         assert!(
             text.contains("ops"),
             "single-note view shows all labels:\n{text}"
+        );
+    }
+
+    #[test]
+    fn note_human_renders_body_when_color() {
+        let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\n# Heading\n";
+        let note = parse_note(raw).unwrap();
+        let text = render_note_human(&note, 80, true);
+        assert!(
+            text.contains("\x1b[1m"),
+            "expected rendered bold heading in:\n{text}"
+        );
+        assert!(
+            text.contains("Heading"),
+            "expected heading text in:\n{text}"
+        );
+    }
+
+    #[test]
+    fn note_human_keeps_raw_body_when_no_color() {
+        let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\n# Heading\n";
+        let note = parse_note(raw).unwrap();
+        let text = render_note_human(&note, 80, false);
+        assert!(
+            text.contains("# Heading"),
+            "expected literal markdown source in:\n{text}"
         );
     }
 }
