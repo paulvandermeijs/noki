@@ -136,7 +136,12 @@ fn blockquote(children: &[Node], width: usize, color: bool) -> String {
 }
 
 fn rule(width: usize, color: bool) -> String {
-    let line = "─".repeat(width.clamp(1, 80));
+    // A short rule (a third of the width) centered with horizontal padding,
+    // rather than a full-width line touching both edges.
+    let width = width.max(1);
+    let rule_width = (width / 3).max(1);
+    let indent = (width - rule_width) / 2;
+    let line = format!("{}{}", " ".repeat(indent), "─".repeat(rule_width));
     if color {
         format!("\x1b[2m{line}\x1b[0m")
     } else {
@@ -256,6 +261,16 @@ mod tests {
     fn thematic_break_draws_rule() {
         let out = render("a\n\n---\n\nb", 80, false);
         assert!(out.contains('─'), "expected rule in {out:?}");
+    }
+
+    #[test]
+    fn thematic_break_is_a_third_wide_and_centered() {
+        let out = render("a\n\n---\n\nb", 90, false);
+        let rule_line = out.lines().find(|line| line.contains('─')).unwrap();
+        let dashes = rule_line.chars().filter(|&c| c == '─').count();
+        assert_eq!(dashes, 30, "rule should be a third of 90: {rule_line:?}");
+        let indent = rule_line.chars().take_while(|&c| c == ' ').count();
+        assert_eq!(indent, 30, "rule should be centered: {rule_line:?}");
     }
 
     #[test]
