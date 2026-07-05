@@ -71,14 +71,19 @@ pub fn render_note_human(note: &Note, table_width: TableWidth, color: bool) -> S
         TableWidth::Fit(width) => {
             table.with(Width::wrap(width).keep_words(true));
         }
-        // Fill exactly the budget by sizing only the value column, so the key
-        // column keeps its natural width (stable across notes regardless of the
-        // value lengths).
+        // Fill exactly the budget by sizing both columns. The key column keeps
+        // its natural width (stable across notes) but is capped at half the
+        // content so an unusually long field name wraps instead of starving the
+        // value column; the value column takes the rest.
         TableWidth::Fixed(width) => {
-            let value_width = width.saturating_sub(key_width + META_TABLE_FRAME).max(1);
-            table
-                .with(Modify::new(Columns::one(1)).with(Width::wrap(value_width).keep_words(true)));
-            table.with(Modify::new(Columns::one(1)).with(Width::increase(value_width)));
+            let content = width.saturating_sub(META_TABLE_FRAME).max(2);
+            let key_col = key_width.clamp(1, content / 2);
+            let value_col = (content - key_col).max(1);
+            for (column, size) in [(0usize, key_col), (1usize, value_col)] {
+                let column = Columns::one(column);
+                table.with(Modify::new(column).with(Width::wrap(size).keep_words(true)));
+                table.with(Modify::new(column).with(Width::increase(size)));
+            }
         }
     }
     let body = if color {
@@ -359,6 +364,26 @@ mod tests {
             key_column(short),
             key_column(long),
             "key-column width should not depend on value length"
+        );
+    }
+
+    #[test]
+    fn note_human_fixed_bounds_long_meta_key() {
+        // An unusually long field name must not blow past the budget or starve
+        // the value column: the table still fits exactly and the key wraps.
+        let raw = "---\ntitle: T\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\nthis-is-an-extremely-long-custom-metadata-field-name: value\n---\n\nok\n";
+        let note = parse_note(raw).unwrap();
+        let text = render_note_human(&note, TableWidth::Fixed(50), false);
+        for line in text.lines() {
+            assert!(
+                line.chars().count() <= 50,
+                "line exceeds width (50): {line:?} in:\n{text}"
+            );
+        }
+        assert_eq!(
+            text.lines().next().unwrap().chars().count(),
+            50,
+            "table should still be exactly 50 wide:\n{text}"
         );
     }
 
