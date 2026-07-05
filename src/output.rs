@@ -8,6 +8,10 @@ use tabled::settings::style::{HorizontalLine, VerticalLine};
 use tabled::settings::{Color, Modify, Style, Width};
 use tabled::{Table, Tabled};
 
+/// Non-content columns in the two-column metadata table: the two outer borders,
+/// the key/value divider, and one space of padding on each side of both cells.
+const META_TABLE_FRAME: usize = 7;
+
 /// How to size the metadata table (and the body wrap width) in `show` output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TableWidth {
@@ -36,25 +40,46 @@ impl TableWidth {
 /// or is forced to exactly it ([`TableWidth::Fixed`]).
 pub fn render_note_human(note: &Note, table_width: TableWidth, color: bool) -> String {
     let width = table_width.columns();
-    let mut builder = Builder::default();
-    builder.push_record(["title".to_string(), note.meta.title.clone()]);
-    builder.push_record(["path".to_string(), note.meta.path.clone()]);
-    builder.push_record(["created".to_string(), note.meta.created.to_rfc2822()]);
-    builder.push_record(["updated".to_string(), note.meta.updated.to_rfc2822()]);
+    let mut rows: Vec<[String; 2]> = vec![
+        ["title".to_string(), note.meta.title.clone()],
+        ["path".to_string(), note.meta.path.clone()],
+        ["created".to_string(), note.meta.created.to_rfc2822()],
+        ["updated".to_string(), note.meta.updated.to_rfc2822()],
+    ];
     if !note.meta.labels.is_empty() {
         let mut palette = LabelPalette::new();
         let labels = label::render_labels(&note.meta.labels, usize::MAX, &mut palette, color);
-        builder.push_record(["labels".to_string(), labels]);
+        rows.push(["labels".to_string(), labels]);
     }
     for (key, value) in &note.meta.extra {
-        builder.push_record([key.clone(), meta_value_display(value)]);
+        rows.push([key.clone(), meta_value_display(value)]);
+    }
+    let key_width = rows
+        .iter()
+        .map(|row| row[0].chars().count())
+        .max()
+        .unwrap_or(0);
+
+    let mut builder = Builder::default();
+    for row in &rows {
+        builder.push_record(row.clone());
     }
     let mut table = builder.build();
     apply_meta_style(&mut table, color);
-    // Always keep the table within the budget; only pad up to it when Fixed.
-    table.with(Width::wrap(width).keep_words(true));
-    if let TableWidth::Fixed(width) = table_width {
-        table.with(Width::increase(width));
+    match table_width {
+        // Adapt to content, bounded by the budget (shrinks the value column).
+        TableWidth::Fit(width) => {
+            table.with(Width::wrap(width).keep_words(true));
+        }
+        // Fill exactly the budget by sizing only the value column, so the key
+        // column keeps its natural width (stable across notes regardless of the
+        // value lengths).
+        TableWidth::Fixed(width) => {
+            let value_width = width.saturating_sub(key_width + META_TABLE_FRAME).max(1);
+            table
+                .with(Modify::new(Columns::one(1)).with(Width::wrap(value_width).keep_words(true)));
+            table.with(Modify::new(Columns::one(1)).with(Width::increase(value_width)));
+        }
     }
     let body = if color {
         crate::render::render(&note.content, width, true)
@@ -315,6 +340,25 @@ mod tests {
         assert!(
             text.contains("# Heading"),
             "expected literal markdown source in:\n{text}"
+        );
+    }
+
+    #[test]
+    fn note_human_fixed_key_column_width_is_stable() {
+        // Notes with the same keys but different value lengths must produce the
+        // same key-column width (padding lands on the value column, not the keys).
+        let short = "---\ntitle: A\npath: p.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nok\n";
+        let long = "---\ntitle: A considerably longer title\npath: some/much/deeper/path/value.md\nlabels: []\ncreated: 2026-06-02T10:00:00+01:00\nupdated: 2026-06-02T10:00:02+01:00\n---\n\nok\n";
+        let key_column = |raw: &str| {
+            let note = parse_note(raw).unwrap();
+            let text = render_note_human(&note, TableWidth::Fixed(70), false);
+            let row = text.lines().find(|line| line.contains("title")).unwrap();
+            row.chars().position(|c| c == '║').unwrap()
+        };
+        assert_eq!(
+            key_column(short),
+            key_column(long),
+            "key-column width should not depend on value length"
         );
     }
 
