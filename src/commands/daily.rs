@@ -58,7 +58,7 @@ fn daily_path(config: &Config, now: DateTime<FixedOffset>) -> Result<String> {
         .daily_filename
         .as_deref()
         .unwrap_or(note::DEFAULT_DAILY_FILENAME);
-    let title = daily_title(config, now);
+    let title = daily_title(config, now)?;
     let labels = [daily_label(config).to_string()];
     note::note_path(template, &title, &labels, &config.note.meta, now)
 }
@@ -123,11 +123,10 @@ fn save_new_daily(
         return Ok(None);
     }
 
-    let title = title
-        .map(str::trim)
-        .filter(|title| !title.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| daily_title(config, now));
+    let title = match title.map(str::trim).filter(|title| !title.is_empty()) {
+        Some(title) => title.to_string(),
+        None => daily_title(config, now)?,
+    };
 
     let mut labels = labels.to_vec();
     add_daily_label(&mut labels, daily_label(config));
@@ -140,13 +139,13 @@ fn save_new_daily(
 
 /// The title for a new daily note, from `note.daily_title` (default
 /// `Daily note for %Y-%m-%d`), rendered as a `chrono` date format.
-fn daily_title(config: &Config, now: DateTime<FixedOffset>) -> String {
+fn daily_title(config: &Config, now: DateTime<FixedOffset>) -> Result<String> {
     let template = config
         .note
         .daily_title
         .as_deref()
         .unwrap_or(note::DEFAULT_DAILY_TITLE);
-    now.format(template).to_string()
+    note::render_title(template, &config.note.meta, now)
 }
 
 /// The label every daily note carries, from `note.daily_label` (default `daily`).
@@ -212,14 +211,35 @@ mod tests {
     #[test]
     fn daily_title_defaults_to_dated_label() {
         let config = Config::default();
-        assert_eq!(daily_title(&config, now()), "Daily note for 2026-07-03");
+        assert_eq!(
+            daily_title(&config, now()).unwrap(),
+            "Daily note for 2026-07-03"
+        );
     }
 
     #[test]
     fn daily_title_uses_configured_template() {
         let mut config = Config::default();
-        config.note.daily_title = Some("Journal for %d %B %Y".to_string());
-        assert_eq!(daily_title(&config, now()), "Journal for 03 July 2026");
+        config.note.daily_title = Some("Journal for {created:%d %B %Y}".to_string());
+        assert_eq!(
+            daily_title(&config, now()).unwrap(),
+            "Journal for 03 July 2026"
+        );
+    }
+
+    #[test]
+    fn daily_title_keeps_meta_verbatim() {
+        // A meta value in a title is NOT slugified (unlike in a filename).
+        let mut config = Config::default();
+        config.note.meta.insert(
+            "author".to_string(),
+            toml::Value::String("Paul van der Meijs".to_string()),
+        );
+        config.note.daily_title = Some("Journal by {author}".to_string());
+        assert_eq!(
+            daily_title(&config, now()).unwrap(),
+            "Journal by Paul van der Meijs"
+        );
     }
 
     #[test]

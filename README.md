@@ -38,8 +38,10 @@ repository = "git@github.com:you/notes.git"
 # A missing or empty value renders as "unknown-<field>" (e.g. unknown-author).
 filename = "{created:%Y/%m/%d/%H-%M-%S}-{title}"
 daily_filename = "{created:%Y/%m/%d}"
-# daily_title is a title, not a path, so it still uses chrono's %-strftime directly.
-daily_title = "Daily note for %Y-%m-%d"
+# daily_title uses the same {field} tokens but rendered verbatim (not slugified,
+# since a title is human-readable). Only {created}/{updated} and meta keys resolve
+# here — not the path-only {title}/{labels}.
+daily_title = "Daily note for {created:%Y-%m-%d}"
 daily_label = "daily"
 # Render `show` at a fixed width, in columns: the body wraps at it and the
 # metadata table is sized to it (clamped down to the terminal width when the
@@ -73,7 +75,7 @@ noki --title "Sprint planning" --label work --label meeting
 Open or create today's daily note (its path comes from `note.daily_filename`,
 default `{created:%Y/%m/%d}`). If today's note already exists it opens pre-filled for you
 to update; otherwise it is created with a title from `note.daily_title` (default
-`Daily note for %Y-%m-%d`). Piped input is appended to an existing daily note.
+`Daily note for {created:%Y-%m-%d}`). Piped input is appended to an existing daily note.
 Every daily note is tagged with `note.daily_label` (default `daily`):
 
 ```sh

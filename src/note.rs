@@ -59,7 +59,7 @@ pub fn to_raw(note: &Note) -> Result<String> {
 
 pub const DEFAULT_FILENAME: &str = "{created:%Y/%m/%d/%H-%M-%S}-{title}";
 pub const DEFAULT_DAILY_FILENAME: &str = "{created:%Y/%m/%d}";
-pub const DEFAULT_DAILY_TITLE: &str = "Daily note for %Y-%m-%d";
+pub const DEFAULT_DAILY_TITLE: &str = "Daily note for {created:%Y-%m-%d}";
 pub const DEFAULT_DAILY_LABEL: &str = "daily";
 
 /// Derive a human title from the content: the first heading, else the first
@@ -107,10 +107,28 @@ pub fn note_path(
     meta: &BTreeMap<String, toml::Value>,
     when: DateTime<FixedOffset>,
 ) -> Result<String> {
-    let rendered = crate::template::render(template, |name| {
-        resolve_field(name, title, labels, meta, when)
-    })?;
+    let rendered = crate::template::render(
+        template,
+        |name| resolve_field(name, title, labels, meta, when),
+        crate::template::Sanitize::Slug,
+    )?;
     Ok(format!("{rendered}.md"))
+}
+
+/// Render a note title from a flat template (`{field}` / `{field:fmt}`). Unlike
+/// [`note_path`], string values are kept verbatim (not slugified) since a title
+/// is human-readable; `{created}`/`{updated}` and static config `meta` keys
+/// resolve, but path-only fields (`{title}`/`{labels}`) do not.
+pub fn render_title(
+    template: &str,
+    meta: &BTreeMap<String, toml::Value>,
+    when: DateTime<FixedOffset>,
+) -> Result<String> {
+    crate::template::render(
+        template,
+        |name| resolve_title_field(name, meta, when),
+        crate::template::Sanitize::Raw,
+    )
 }
 
 /// Parse options with the frontmatter construct enabled (GFM otherwise).
@@ -184,6 +202,23 @@ fn resolve_field(
         "title" => Some(Field::Text(title.to_string())),
         "created" | "updated" => Some(Field::Date(when)),
         "labels" => Some(Field::Text(labels.join(" "))),
+        other => meta
+            .get(other)
+            .map(|value| Field::Text(meta_value_string(value))),
+    }
+}
+
+/// Resolve a template field for `render_title`: `created`/`updated` dates and
+/// static config meta values. Path-only fields (`title`/`labels`) are not
+/// exposed; an absent key returns `None` → `unknown-<field>`.
+fn resolve_title_field(
+    name: &str,
+    meta: &BTreeMap<String, toml::Value>,
+    when: DateTime<FixedOffset>,
+) -> Option<crate::template::Field> {
+    use crate::template::Field;
+    match name {
+        "created" | "updated" => Some(Field::Date(when)),
         other => meta
             .get(other)
             .map(|value| Field::Text(meta_value_string(value))),
