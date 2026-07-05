@@ -18,10 +18,16 @@ pub fn run(vcs: &dyn VersionControl, path: &str, json: bool, raw: bool) -> Resul
     let rendered = if json {
         output::render_note_json(&note)?
     } else {
-        output::render_note_human(&note, 80, stdout().is_terminal())
+        output::render_note_human(&note, terminal_width(), stdout().is_terminal())
     };
     println!("{rendered}");
     Ok(())
+}
+
+/// The current terminal width in columns, or 80 when it can't be determined
+/// (e.g. output is piped).
+fn terminal_width() -> usize {
+    terminal_size::terminal_size().map_or(80, |(terminal_size::Width(cols), _)| cols as usize)
 }
 
 #[cfg(test)]
