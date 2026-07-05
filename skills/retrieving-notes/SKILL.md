@@ -5,7 +5,7 @@ description: Find, read, and reason over the user's noki notes by driving noki's
 
 # Retrieving notes from noki
 
-noki stores notes as Markdown files in a git-backed repo and can print them as JSON. Always drive it **structured** — the human table output is colored, width-dependent, and truncates labels, so parse `--json` instead of scraping the table.
+noki stores notes as Markdown files in a git-backed repo and can print them as JSON. Always drive it **structured** — the human output is colored, width-dependent, truncates labels, and renders the Markdown body (wrapped, ANSI-styled), so parse `--json` (or `--raw` for the exact source) instead of scraping it.
 
 ## List notes
 
