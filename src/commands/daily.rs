@@ -49,13 +49,18 @@ pub fn run(
 }
 
 /// Today's daily-note path from `note.daily_filename` (default `{created:%Y/%m/%d}`).
+/// `{title}` and `{labels}` resolve to the daily note's own title and label —
+/// both derived from config + date, so the path stays stable per day regardless
+/// of any `--title`/`--label` given (which would otherwise break daily lookup).
 fn daily_path(config: &Config, now: DateTime<FixedOffset>) -> Result<String> {
     let template = config
         .note
         .daily_filename
         .as_deref()
         .unwrap_or(note::DEFAULT_DAILY_FILENAME);
-    note::note_path(template, "", &[], &config.note.meta, now)
+    let title = daily_title(config, now);
+    let labels = [daily_label(config).to_string()];
+    note::note_path(template, &title, &labels, &config.note.meta, now)
 }
 
 /// Load and parse the note at `path`, or `None` if there is none there. A read
@@ -189,6 +194,19 @@ mod tests {
         let mut config = Config::default();
         config.note.daily_filename = Some("journal/{created:%Y-%m-%d}".to_string());
         assert_eq!(daily_path(&config, now()).unwrap(), "journal/2026-07-03.md");
+    }
+
+    #[test]
+    fn daily_path_resolves_title_and_labels_to_daily_values() {
+        // `{title}` and `{labels}` must resolve to the daily note's own title
+        // and label (defaults: "Daily note for 2026-07-03" and "daily"), not the
+        // `unknown-*` placeholder.
+        let mut config = Config::default();
+        config.note.daily_filename = Some("{labels}/{title}".to_string());
+        assert_eq!(
+            daily_path(&config, now()).unwrap(),
+            "daily/daily-note-for-2026-07-03.md"
+        );
     }
 
     #[test]
