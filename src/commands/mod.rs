@@ -2,6 +2,7 @@ pub mod create;
 pub mod daily;
 pub mod edit;
 pub mod list;
+pub mod refresh;
 pub mod show;
 
 use crate::note::{Note, parse_note};
