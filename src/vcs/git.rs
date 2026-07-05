@@ -161,7 +161,9 @@ fn rebase_onto_origin(repo: &git2::Repository, branch: &str) -> Result<()> {
         let upstream_object = repo.find_object(upstream.id(), None)?;
         let mut checkout = git2::build::CheckoutBuilder::new();
         repo.checkout_tree(&upstream_object, Some(&mut checkout))
-            .context("Refusing to fast-forward: local changes would be overwritten")?;
+            .context(
+                "Failed to fast-forward the working tree to origin (local changes may conflict)",
+            )?;
         let refname = format!("refs/heads/{branch}");
         let mut reference = repo.find_reference(&refname)?;
         reference.set_target(upstream.id(), "noki: fast-forward to origin")?;
