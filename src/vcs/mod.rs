@@ -13,6 +13,8 @@ pub trait VersionControl {
     fn read_file(&self, path: &str) -> Result<String>;
     /// Write a note file and record it (commit, and push when a remote exists).
     fn write_file(&self, path: &str, contents: &str, message: &str) -> Result<()>;
+    /// Bring the local working tree up to date with the remote (fetch + rebase).
+    fn refresh(&self) -> Result<()>;
 }
 
 /// Open the working clone for the configured repository.
@@ -83,6 +85,10 @@ impl VersionControl for MemoryBackend {
             .insert(path.to_string(), contents.to_string());
         Ok(())
     }
+
+    fn refresh(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -101,5 +107,11 @@ mod tests {
     fn memory_backend_read_missing_is_error() {
         let backend = MemoryBackend::new();
         assert!(backend.read_file("nope.md").is_err());
+    }
+
+    #[test]
+    fn memory_backend_refresh_is_ok() {
+        let backend = MemoryBackend::new();
+        assert!(backend.refresh().is_ok());
     }
 }

@@ -45,6 +45,11 @@ impl VersionControl for GitBackend {
         std::fs::write(&full, contents)?;
         commit_and_push(&self.workdir, path, message)
     }
+
+    fn refresh(&self) -> Result<()> {
+        let repo = git2::Repository::open(&self.workdir)?;
+        sync(&repo)
+    }
 }
 
 fn clone(url: &str, dest: &Path) -> Result<()> {
@@ -309,6 +314,31 @@ mod tests {
         push_master(&seed);
 
         (origin_dir, seed_dir, seed)
+    }
+
+    #[test]
+    fn refresh_pulls_remote_changes_into_working_tree() {
+        let (origin_dir, _seed_dir, seed) = origin_with_seed();
+        let origin_url = origin_dir.path().to_str().unwrap();
+
+        let workdir = tempfile::tempdir().unwrap();
+        let noki = Repository::clone(origin_url, workdir.path()).unwrap();
+        set_identity(&noki);
+
+        // A note is added on another machine and reaches origin.
+        commit_file(&seed, "2026/07/05/note.md", "remote note\n", "remote note");
+        push_master(&seed);
+
+        let backend = GitBackend {
+            workdir: workdir.path().to_path_buf(),
+        };
+        backend.refresh().unwrap();
+
+        // The refreshed clone can now read the note that was created elsewhere.
+        assert_eq!(
+            backend.read_file("2026/07/05/note.md").unwrap(),
+            "remote note\n"
+        );
     }
 
     #[test]
