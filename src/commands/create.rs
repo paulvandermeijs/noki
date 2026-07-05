@@ -33,7 +33,7 @@ pub(crate) fn save_note(
     labels: &[String],
     now: DateTime<FixedOffset>,
 ) -> Result<Option<String>> {
-    match build_note(content, config, title, labels, now) {
+    match build_note(content, config, title, labels, now)? {
         None => {
             eprintln!("Skipping empty note.");
             Ok(None)
@@ -54,10 +54,10 @@ pub(crate) fn build_note(
     title: Option<&str>,
     labels: &[String],
     now: DateTime<FixedOffset>,
-) -> Option<(String, String)> {
+) -> Result<Option<(String, String)>> {
     let content = content.trim();
     if content.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     let title = title
@@ -70,11 +70,11 @@ pub(crate) fn build_note(
         .filename
         .as_deref()
         .unwrap_or(note::DEFAULT_FILENAME);
-    let path = note::note_path(template, &title, now);
+    let path = note::note_path(template, &title, labels, &config.note.meta, now)?;
 
     let note = assemble_note(path.clone(), title, content, config, labels, now);
-    let raw = note::to_raw(&note).ok()?;
-    Some((path, raw))
+    let raw = note::to_raw(&note)?;
+    Ok(Some((path, raw)))
 }
 
 /// Assemble a `Note` at an explicit `path` with an already-resolved `title`.
@@ -134,15 +134,20 @@ mod tests {
     #[test]
     fn build_note_returns_none_for_empty_content() {
         let config = Config::default();
-        assert!(build_note("   \n", &config, None, &[], now()).is_none());
+        assert!(
+            build_note("   \n", &config, None, &[], now())
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
     fn build_note_produces_path_and_frontmatter() {
         let config = Config::default();
-        let (path, raw) =
-            build_note("# My new note\n\nHello, World!", &config, None, &[], now()).unwrap();
-        assert_eq!(path, "2026/06/02/10:00:00-my-new-note.md");
+        let (path, raw) = build_note("# My new note\n\nHello, World!", &config, None, &[], now())
+            .unwrap()
+            .unwrap();
+        assert_eq!(path, "2026/06/02/10-00-00-my-new-note.md");
         let note = parse_note(&raw).unwrap();
         assert_eq!(note.meta.title, "My new note");
         assert_eq!(note.content, "# My new note\n\nHello, World!\n");
@@ -158,8 +163,9 @@ mod tests {
             &[],
             now(),
         )
+        .unwrap()
         .unwrap();
-        assert_eq!(path, "2026/06/02/10:00:00-custom-title.md");
+        assert_eq!(path, "2026/06/02/10-00-00-custom-title.md");
         let note = parse_note(&raw).unwrap();
         assert_eq!(note.meta.title, "Custom Title");
     }
@@ -167,7 +173,9 @@ mod tests {
     #[test]
     fn build_note_falls_back_to_content_title_when_none() {
         let config = Config::default();
-        let (_, raw) = build_note("# Real Title\n\nbody", &config, None, &[], now()).unwrap();
+        let (_, raw) = build_note("# Real Title\n\nbody", &config, None, &[], now())
+            .unwrap()
+            .unwrap();
         let note = parse_note(&raw).unwrap();
         assert_eq!(note.meta.title, "Real Title");
     }
@@ -175,8 +183,9 @@ mod tests {
     #[test]
     fn build_note_falls_back_when_title_is_blank() {
         let config = Config::default();
-        let (_, raw) =
-            build_note("# Real Title\n\nbody", &config, Some("   "), &[], now()).unwrap();
+        let (_, raw) = build_note("# Real Title\n\nbody", &config, Some("   "), &[], now())
+            .unwrap()
+            .unwrap();
         let note = parse_note(&raw).unwrap();
         assert_eq!(note.meta.title, "Real Title");
     }
@@ -185,7 +194,9 @@ mod tests {
     fn build_note_sets_labels_from_arguments() {
         let config = Config::default();
         let labels = vec!["work".to_string(), "urgent".to_string()];
-        let (_, raw) = build_note("body", &config, None, &labels, now()).unwrap();
+        let (_, raw) = build_note("body", &config, None, &labels, now())
+            .unwrap()
+            .unwrap();
         let note = parse_note(&raw).unwrap();
         assert_eq!(
             note.meta.labels,
@@ -202,7 +213,9 @@ mod tests {
             "   ".to_string(),
             "urgent".to_string(),
         ];
-        let (_, raw) = build_note("body", &config, None, &labels, now()).unwrap();
+        let (_, raw) = build_note("body", &config, None, &labels, now())
+            .unwrap()
+            .unwrap();
         let note = parse_note(&raw).unwrap();
         assert_eq!(
             note.meta.labels,
@@ -245,7 +258,9 @@ mod tests {
             toml::Value::String("hacked".to_string()),
         );
 
-        let (_, raw) = build_note("# Real Title\n\nbody", &config, None, &[], now()).unwrap();
+        let (_, raw) = build_note("# Real Title\n\nbody", &config, None, &[], now())
+            .unwrap()
+            .unwrap();
         let note = crate::note::parse_note(&raw).unwrap();
 
         assert_eq!(note.meta.title, "Real Title");

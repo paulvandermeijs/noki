@@ -17,7 +17,7 @@ pub fn run(
     labels: &[String],
 ) -> Result<()> {
     let now = Local::now().fixed_offset();
-    let path = daily_path(config, now);
+    let path = daily_path(config, now)?;
     let input = crate::io::read_stdin();
 
     if let Some(note) = load_existing(vcs, &path)? {
@@ -48,15 +48,14 @@ pub fn run(
     Ok(())
 }
 
-/// Today's daily-note path from `note.daily_filename`. The daily template
-/// carries no `%title`, so the title argument to `note_path` is unused.
-fn daily_path(config: &Config, now: DateTime<FixedOffset>) -> String {
+/// Today's daily-note path from `note.daily_filename` (default `{created:%Y/%m/%d}`).
+fn daily_path(config: &Config, now: DateTime<FixedOffset>) -> Result<String> {
     let template = config
         .note
         .daily_filename
         .as_deref()
         .unwrap_or(note::DEFAULT_DAILY_FILENAME);
-    note::note_path(template, "", now)
+    note::note_path(template, "", &[], &config.note.meta, now)
 }
 
 /// Load and parse the note at `path`, or `None` if there is none there. A read
@@ -182,14 +181,14 @@ mod tests {
     #[test]
     fn daily_path_uses_default_template() {
         let config = Config::default();
-        assert_eq!(daily_path(&config, now()), "2026/07/03.md");
+        assert_eq!(daily_path(&config, now()).unwrap(), "2026/07/03.md");
     }
 
     #[test]
     fn daily_path_uses_configured_template() {
         let mut config = Config::default();
-        config.note.daily_filename = Some("journal/%Y-%m-%d".to_string());
-        assert_eq!(daily_path(&config, now()), "journal/2026-07-03.md");
+        config.note.daily_filename = Some("journal/{created:%Y-%m-%d}".to_string());
+        assert_eq!(daily_path(&config, now()).unwrap(), "journal/2026-07-03.md");
     }
 
     #[test]
