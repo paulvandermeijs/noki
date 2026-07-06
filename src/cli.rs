@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use clap_complete::engine::ArgValueCandidates;
 use clap_verbosity_flag::Verbosity;
 
 /// Capture and browse version-controlled notes.
@@ -44,6 +45,7 @@ pub enum Commands {
     /// Show a single note by its path
     Show {
         /// The repository-relative path of the note
+        #[arg(add = ArgValueCandidates::new(crate::completion::note_paths))]
         path: String,
         /// Output as JSON
         #[arg(long)]
@@ -55,6 +57,7 @@ pub enum Commands {
     /// Edit an existing note in your editor
     Edit {
         /// The repository-relative path of the note
+        #[arg(add = ArgValueCandidates::new(crate::completion::note_paths))]
         path: String,
     },
     /// Update your notes with changes made elsewhere
