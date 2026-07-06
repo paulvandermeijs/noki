@@ -147,7 +147,7 @@ mod tests {
         let (path, raw) = build_note("# My new note\n\nHello, World!", &config, None, &[], now())
             .unwrap()
             .unwrap();
-        assert_eq!(path, "2026/06/02/10-00-00-my-new-note.md");
+        assert_eq!(path, "2026/06/02/10:00:00-my-new-note.md");
         let note = parse_note(&raw).unwrap();
         assert_eq!(note.meta.title, "My new note");
         assert_eq!(note.content, "# My new note\n\nHello, World!\n");
@@ -165,7 +165,7 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        assert_eq!(path, "2026/06/02/10-00-00-custom-title.md");
+        assert_eq!(path, "2026/06/02/10:00:00-custom-title.md");
         let note = parse_note(&raw).unwrap();
         assert_eq!(note.meta.title, "Custom Title");
     }

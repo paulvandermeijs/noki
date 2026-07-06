@@ -31,7 +31,7 @@ repository = "git@github.com:you/notes.git"
 # {title}, {labels}, {created:%Y/%m/%d}, {updated:...}, and any custom meta key
 # (e.g. {author}). Date tokens take a chrono strftime format (default %Y-%m-%d).
 # A missing or empty value renders as "unknown-<field>" (e.g. unknown-author).
-filename = "{created:%Y/%m/%d/%H-%M-%S}-{title}"
+filename = "{created:%Y/%m/%d/%H:%M:%S}-{title}"
 daily_filename = "{created:%Y/%m/%d}"
 # daily_title uses the same {field} tokens but rendered verbatim (not slugified,
 # since a title is human-readable). Only {created}/{updated} and meta keys resolve

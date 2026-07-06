@@ -57,7 +57,7 @@ pub fn to_raw(note: &Note) -> Result<String> {
     Ok(format!("---\n{yaml}---\n\n{}", note.content))
 }
 
-pub const DEFAULT_FILENAME: &str = "{created:%Y/%m/%d/%H-%M-%S}-{title}";
+pub const DEFAULT_FILENAME: &str = "{created:%Y/%m/%d/%H:%M:%S}-{title}";
 pub const DEFAULT_DAILY_FILENAME: &str = "{created:%Y/%m/%d}";
 pub const DEFAULT_DAILY_TITLE: &str = "Daily note for {created:%Y-%m-%d}";
 pub const DEFAULT_DAILY_LABEL: &str = "daily";
@@ -306,7 +306,7 @@ mod tests {
     fn note_path_expands_date_and_slugged_title() {
         let when = at("2026-06-02T10:00:00+01:00");
         let path = note_path(DEFAULT_FILENAME, "My new note", &[], &BTreeMap::new(), when).unwrap();
-        assert_eq!(path, "2026/06/02/10-00-00-my-new-note.md");
+        assert_eq!(path, "2026/06/02/10:00:00-my-new-note.md");
     }
 
     #[test]
