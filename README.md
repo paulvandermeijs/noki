@@ -110,6 +110,35 @@ labels, and other frontmatter are kept as-is):
 noki edit 2026/06/02/10:00:00-my-new-note.md
 ```
 
+## Shell completion
+
+Nōki completes subcommands and flags, and — for `show` and `edit` — the
+repository-relative paths of your notes. Completion is dynamic: pressing
+<kbd>Tab</kbd> after `noki show ` lists your actual notes.
+
+Enable it by evaluating `noki`'s output for your shell. Add the line to your
+shell's startup file to make it permanent:
+
+```sh
+# bash — add to ~/.bashrc
+source <(COMPLETE=bash noki)
+
+# zsh — add to ~/.zshrc
+source <(COMPLETE=zsh noki)
+
+# fish — add to ~/.config/fish/config.fish
+COMPLETE=fish noki | source
+```
+
+Elvish and PowerShell are supported too; run `COMPLETE=<shell> noki` to print the
+registration script for your shell.
+
+Path suggestions come from the repository configured in your global config or a
+`.noki.toml` on the path from your current directory (a `--repository` passed on
+the command line is not consulted during completion), and only when that
+repository has already been cloned locally — completion never clones over the
+network.
+
 ## Agent skills
 
 Nōki ships with two [agent skills](skills/) that teach an AI coding agent (Claude
