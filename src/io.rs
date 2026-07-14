@@ -10,6 +10,8 @@ pub fn read_stdin() -> Option<String> {
         return None;
     }
 
+    ignore_sigint();
+
     let mut buffer = String::new();
     if stdin.lock().read_to_string(&mut buffer).is_err() {
         return None;
@@ -26,6 +28,25 @@ pub(crate) fn clean_stdin(raw: &str) -> Option<String> {
     }
 }
 
+/// Ctrl+C delivers SIGINT to every process in the foreground pipeline. A
+/// producer like `yap dictate` traps it to flush its final output, but noki
+/// would die mid-read and lose the note. Ignoring SIGINT lets the read run
+/// to EOF, so the note is stored no matter how the producer is stopped. Not
+/// restored afterwards: the process is short-lived and everything after the
+/// read is the work being protected.
+#[cfg(unix)]
+fn ignore_sigint() {
+    // SAFETY: `signal` with SIG_IGN installs no user handler and reads no
+    // user data; the only effect is process-global disposition, set once
+    // before the blocking read.
+    unsafe {
+        libc::signal(libc::SIGINT, libc::SIG_IGN);
+    }
+}
+
+#[cfg(not(unix))]
+fn ignore_sigint() {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -34,5 +55,16 @@ mod tests {
     fn clean_stdin_trims_and_empties_to_none() {
         assert_eq!(clean_stdin("  hello \n"), Some("hello".to_string()));
         assert_eq!(clean_stdin("   \n"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ignore_sigint_marks_sigint_ignored() {
+        ignore_sigint();
+
+        let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+        let rc = unsafe { libc::sigaction(libc::SIGINT, std::ptr::null(), &mut action) };
+        assert_eq!(rc, 0);
+        assert_eq!(action.sa_sigaction, libc::SIG_IGN);
     }
 }

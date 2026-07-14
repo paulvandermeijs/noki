@@ -1787,6 +1787,7 @@ dependencies = [
  "env_logger",
  "git2",
  "gix",
+ "libc",
  "log",
  "markdown",
  "serde",
