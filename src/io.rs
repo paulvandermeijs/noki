@@ -60,6 +60,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn ignore_sigint_marks_sigint_ignored() {
+        // NOTE: this leaves SIGINT ignored for the rest of the test binary;
+        // children spawned by later tests inherit it (see editor.rs's
+        // reset_sigint test).
         ignore_sigint();
 
         let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
