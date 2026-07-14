@@ -165,8 +165,13 @@ Create `/tmp/noki-sigint-e2e/ctrl_c.exp`:
 #!/usr/bin/expect -f
 # Producer mimics `yap dictate`: traps INT, flushes final text, exits.
 # Ctrl+C hits the whole pipeline; noki must survive and store the note.
+# The outer wrapper needs `trap 'true' INT` so the wrapper shell itself
+# survives the Ctrl+C without tearing down the pipeline. A real handler
+# (not `trap '' INT`) is essential: handlers reset to SIG_DFL across exec,
+# so the children still receive SIGINT with default disposition and noki's
+# own ignore_sigint() remains the thing under test.
 set noki [lindex $argv 0]
-spawn zsh -c "zsh -c 'trap \"print the dictated note; exit 0\" INT; sleep 30' | $noki --no-edit --repository /tmp/noki-sigint-e2e/notes.git"
+spawn zsh -c "trap 'true' INT; zsh -c 'trap \"print the dictated note; exit 0\" INT; sleep 30' | $noki --no-edit --repository /tmp/noki-sigint-e2e/notes.git"
 sleep 2
 send "\003"
 expect eof
@@ -183,7 +188,7 @@ Expected: `ls` shows exactly one note titled `the dictated note`. Then confirm t
 
 ```bash
 ./target/debug/noki show --repository /tmp/noki-sigint-e2e/notes.git --raw \
-  "$(./target/debug/noki ls --repository /tmp/noki-sigint-e2e/notes.git --json | jq -r '.[0].path')"
+  "$(./target/debug/noki ls --repository /tmp/noki-sigint-e2e/notes.git --json | jq -r '.[0].meta.path')"
 ```
 
 Expected: raw note whose body is `the dictated note`.
