@@ -61,6 +61,14 @@ Capture piped input without opening the editor:
 echo "A quick note" | noki --no-edit
 ```
 
+Interactive producers work too — noki ignores Ctrl+C while reading piped
+input, so stopping a live producer still stores everything it flushed on
+the way out:
+
+```sh
+yap dictate | noki --no-edit
+```
+
 Set a custom title and attach labels (repeat `--label` for several):
 
 ```sh
