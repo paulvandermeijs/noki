@@ -84,7 +84,7 @@ fn resolve_token(
                 bail!("template field '{name}' does not take a ':format'");
             }
             let rendered = match sanitize {
-                Sanitize::Slug => slug::slugify(&value),
+                Sanitize::Slug => truncate_slug(slug::slugify(&value), MAX_SLUG_LENGTH),
                 Sanitize::Raw => value,
             };
             Ok(if rendered.is_empty() {
@@ -113,6 +113,27 @@ fn format_date(when: DateTime<FixedOffset>, format: &str) -> Result<String> {
         bail!("invalid date format '{format}' in template");
     }
     Ok(when.format_with_items(items.iter()).to_string())
+}
+
+/// Path-segment slugs are capped so a paragraph-length title (e.g. a dictated
+/// recording) cannot exceed the OS filename-component limit (255 bytes on
+/// macOS/Linux). 80 keeps names readable with ample headroom for the
+/// timestamp prefix and `.md` suffix.
+const MAX_SLUG_LENGTH: usize = 80;
+
+/// Cap `slug` at `max` characters, flooring to a whole word. `slug::slugify`
+/// output is lowercase ASCII with single `-` separators and no leading or
+/// trailing dash, so byte indexing is char-safe and every `-` is a word
+/// boundary. A single word longer than `max` is hard-cut so the result is
+/// never empty.
+fn truncate_slug(slug: String, max: usize) -> String {
+    if slug.len() <= max {
+        return slug;
+    }
+    match slug[..=max].rfind('-') {
+        Some(cut) => slug[..cut].to_string(),
+        None => slug[..max].to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -186,6 +207,64 @@ mod tests {
         )
         .unwrap();
         assert_eq!(out, "unknown-labels");
+    }
+
+    #[test]
+    fn overlong_slug_cuts_exactly_on_a_word_boundary() {
+        // "sentence" slugs to 8 chars; n words join to 9n-1 chars, so 9 words
+        // is exactly 80 — the boundary sits precisely at the cap.
+        let value = "sentence ".repeat(20);
+        let out = render(
+            "{title}",
+            |_| Some(Field::Text(value.clone())),
+            Sanitize::Slug,
+        )
+        .unwrap();
+        let nine_words = ["sentence"; 9].join("-");
+        assert_eq!(out, nine_words);
+        assert_eq!(out.len(), 80);
+    }
+
+    #[test]
+    fn overlong_slug_floors_to_the_last_whole_word() {
+        // "abcdefghij" slugs to 10 chars; 7 words = 76 chars, 8 words = 87.
+        // The cap must floor to 7 whole words, never cut mid-word.
+        let value = "abcdefghij ".repeat(20);
+        let out = render(
+            "{title}",
+            |_| Some(Field::Text(value.clone())),
+            Sanitize::Slug,
+        )
+        .unwrap();
+        let seven_words = ["abcdefghij"; 7].join("-");
+        assert_eq!(out, seven_words);
+        assert!(!out.ends_with('-'));
+    }
+
+    #[test]
+    fn single_giant_word_is_hard_cut_never_empty() {
+        let value = "a".repeat(200);
+        let out = render(
+            "{title}",
+            |_| Some(Field::Text(value.clone())),
+            Sanitize::Slug,
+        )
+        .unwrap();
+        assert_eq!(out, "a".repeat(80));
+    }
+
+    #[test]
+    fn slug_of_exactly_max_length_is_unchanged() {
+        // 9 "sentence" words slug to exactly 80 chars — at the cap, not over it.
+        let value = "sentence ".repeat(9);
+        let out = render(
+            "{title}",
+            |_| Some(Field::Text(value.clone())),
+            Sanitize::Slug,
+        )
+        .unwrap();
+        assert_eq!(out.len(), 80);
+        assert_eq!(out, ["sentence"; 9].join("-"));
     }
 
     #[test]
