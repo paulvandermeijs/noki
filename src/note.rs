@@ -323,6 +323,22 @@ mod tests {
     }
 
     #[test]
+    fn note_path_component_stays_under_os_limit_for_paragraph_titles() {
+        // A dictated note's title is its entire first paragraph; the final
+        // path component must stay under the 255-byte OS limit regardless.
+        let when = at("2026-07-14T17:25:03+02:00");
+        let title = "this is one very long dictated sentence that just keeps going ".repeat(10);
+        let path = note_path(DEFAULT_FILENAME, &title, &[], &BTreeMap::new(), when).unwrap();
+        let component = path.rsplit('/').next().unwrap();
+        assert!(
+            component.len() < 255,
+            "final component is {} bytes: {component}",
+            component.len()
+        );
+        assert!(component.ends_with(".md"));
+    }
+
+    #[test]
     fn note_path_missing_meta_defaults_to_unknown() {
         let when = at("2026-06-02T10:00:00+01:00");
         // `author` isn't in meta, and there are no labels → `unknown-<field>`.
