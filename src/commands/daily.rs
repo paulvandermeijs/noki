@@ -20,32 +20,67 @@ pub fn run(
     let path = daily_path(config, now)?;
     let input = crate::io::read_stdin();
 
-    if let Some(note) = load_existing(vcs, &path)? {
-        if no_edit {
-            match input {
-                Some(piped) => {
-                    append_and_save(vcs, config, note, &piped, now)?;
-                }
-                None => eprintln!("Nothing to add to today's note."),
+    match load_existing(vcs, &path)? {
+        Some(note) => {
+            if no_edit {
+                capture_existing_no_edit(vcs, config, note, input, now)
+            } else {
+                capture_existing_interactive(vcs, config, note, input, now)
             }
-        } else {
-            let prefill = match &input {
-                Some(piped) => append_body(&note.content, piped),
-                None => note.content.clone(),
-            };
-            let body = crate::editor::get_content_from_editor(Some(prefill))?;
-            save_update(vcs, config, note, &body, now)?;
         }
-        return Ok(());
+        None => {
+            let content = if no_edit {
+                input.unwrap_or_default()
+            } else {
+                crate::editor::get_content_from_editor(input)?
+            };
+            save_new_daily(vcs, config, &path, &content, title, labels, now)?;
+            Ok(())
+        }
     }
+}
 
-    let content = if no_edit {
-        input.unwrap_or_default()
-    } else {
-        crate::editor::get_content_from_editor(input)?
-    };
-    save_new_daily(vcs, config, &path, &content, title, labels, now)?;
+/// The `--no-edit` update of an existing daily note. Editor-free (no stdin, no
+/// `$EDITOR`), so it is unit-testable: append piped `input` to today's note, or
+/// warn when there is nothing to add.
+fn capture_existing_no_edit(
+    vcs: &dyn VersionControl,
+    config: &Config,
+    note: Note,
+    input: Option<String>,
+    now: DateTime<FixedOffset>,
+) -> Result<()> {
+    match input {
+        Some(piped) => {
+            append_and_save(vcs, config, note, &piped, now)?;
+        }
+        None => eprintln!("Nothing to add to today's note."),
+    }
     Ok(())
+}
+
+/// The interactive update of an existing daily note. Not unit-tested — it spawns
+/// `$EDITOR`; the pure prefill decision lives in `prefill_for_update`.
+fn capture_existing_interactive(
+    vcs: &dyn VersionControl,
+    config: &Config,
+    note: Note,
+    input: Option<String>,
+    now: DateTime<FixedOffset>,
+) -> Result<()> {
+    let prefill = prefill_for_update(&note.content, input);
+    let body = crate::editor::get_content_from_editor(Some(prefill))?;
+    save_update(vcs, config, note, &body, now)?;
+    Ok(())
+}
+
+/// The editor prefill when updating an existing daily note: the body with any
+/// piped `input` appended below it, or the body unchanged when nothing was piped.
+fn prefill_for_update(content: &str, input: Option<String>) -> String {
+    match input {
+        Some(piped) => append_body(content, &piped),
+        None => content.to_string(),
+    }
 }
 
 /// Today's daily-note path from `note.daily_filename` (default `{created:%Y/%m/%d}`).
@@ -428,5 +463,42 @@ mod tests {
         assert_eq!(saved.meta.created, at("2026-07-03T08:00:00+02:00"));
         assert_eq!(saved.meta.title, "Daily note for 2026-07-03");
         assert_eq!(saved.meta.labels, vec!["daily".to_string()]);
+    }
+
+    #[test]
+    fn capture_existing_no_edit_appends_piped_input() {
+        let backend = MemoryBackend::with_files(&[("2026/07/03.md", EXISTING)]);
+        let config = Config::default();
+        let note = parse_note(EXISTING).unwrap();
+        capture_existing_no_edit(&backend, &config, note, Some("did X".to_string()), now())
+            .unwrap();
+        let saved = parse_note(&backend.read_file("2026/07/03.md").unwrap()).unwrap();
+        assert_eq!(saved.content, "Morning notes\n\ndid X\n");
+        assert_eq!(saved.meta.updated, now());
+    }
+
+    #[test]
+    fn capture_existing_no_edit_without_input_leaves_note_untouched() {
+        let backend = MemoryBackend::with_files(&[("2026/07/03.md", EXISTING)]);
+        let config = Config::default();
+        let note = parse_note(EXISTING).unwrap();
+        capture_existing_no_edit(&backend, &config, note, None, now()).unwrap();
+        assert_eq!(backend.read_file("2026/07/03.md").unwrap(), EXISTING);
+    }
+
+    #[test]
+    fn prefill_for_update_appends_piped_input() {
+        assert_eq!(
+            prefill_for_update("Morning notes\n", Some("did X".to_string())),
+            "Morning notes\n\ndid X"
+        );
+    }
+
+    #[test]
+    fn prefill_for_update_without_input_keeps_body() {
+        assert_eq!(
+            prefill_for_update("Morning notes\n", None),
+            "Morning notes\n"
+        );
     }
 }
