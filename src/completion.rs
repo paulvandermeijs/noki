@@ -26,7 +26,7 @@ fn candidates(backend: &dyn VersionControl) -> Vec<CompletionCandidate> {
 }
 
 fn load_backend() -> Option<Box<dyn VersionControl>> {
-    let config = config::load(None).ok()?;
+    let config = config::load(None, false).ok()?;
     vcs::open_existing(&config).ok().flatten()
 }
 

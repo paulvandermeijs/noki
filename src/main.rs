@@ -23,7 +23,7 @@ fn main() {
 }
 
 fn run(cli: Cli) -> anyhow::Result<()> {
-    let config = config::load(cli.repository)?;
+    let config = config::load(cli.repository, cli.global)?;
     let backend = vcs::open_backend(&config)?;
 
     match cli.command {

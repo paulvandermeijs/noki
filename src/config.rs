@@ -48,25 +48,34 @@ impl Config {
 }
 
 /// Load configuration from the global config file, any `.noki.toml` files from
-/// the current directory up to the filesystem root, and a CLI override.
-pub fn load(repository_override: Option<String>) -> Result<Config> {
+/// the current directory up to the filesystem root, and a CLI override. When
+/// `global_only` is set — or a `repository_override` is given — the local
+/// `.noki.toml` layer is skipped and only the global file (plus the override)
+/// is used.
+pub fn load(repository_override: Option<String>, global_only: bool) -> Result<Config> {
     let global = global_config_path();
     let start = std::env::current_dir()?;
-    load_from(global.as_deref(), &start, repository_override)
+    load_from(global.as_deref(), &start, repository_override, global_only)
 }
 
 pub(crate) fn load_from(
     global: Option<&Path>,
     start: &Path,
     repository_override: Option<String>,
+    global_only: bool,
 ) -> Result<Config> {
+    // A repository override also means "global config only".
+    let global_only = global_only || repository_override.is_some();
+
     let mut config = match global {
         Some(path) if path.exists() => read_config(path)?,
         _ => Config::default(),
     };
 
-    for path in local_config_paths(start) {
-        config.merge(read_config(&path)?);
+    if !global_only {
+        for path in local_config_paths(start) {
+            config.merge(read_config(&path)?);
+        }
     }
 
     if repository_override.is_some() {
@@ -138,7 +147,7 @@ mod tests {
             "repository = \"from-local\"\n",
         )
         .unwrap();
-        let config = load_from(None, dir.path(), Some("from-cli".to_string())).unwrap();
+        let config = load_from(None, dir.path(), Some("from-cli".to_string()), false).unwrap();
         assert_eq!(config.repository().unwrap(), "from-cli");
     }
 
@@ -153,7 +162,7 @@ mod tests {
         )
         .unwrap();
         fs::write(child.join(".noki.toml"), "repository = \"nearest\"\n").unwrap();
-        let config = load_from(None, &child, None).unwrap();
+        let config = load_from(None, &child, None, false).unwrap();
         assert_eq!(config.repository().unwrap(), "nearest");
     }
 
@@ -165,7 +174,7 @@ mod tests {
             "repository = \"r\"\n\n[note]\nfilename = \"%Y-%title\"\nmeta = { author = \"Paul\" }\n",
         )
         .unwrap();
-        let config = load_from(None, dir.path(), None).unwrap();
+        let config = load_from(None, dir.path(), None, false).unwrap();
         assert_eq!(config.note.filename.as_deref(), Some("%Y-%title"));
         assert_eq!(
             config.note.meta.get("author").unwrap().as_str(),
@@ -176,7 +185,7 @@ mod tests {
     #[test]
     fn missing_repository_is_an_error() {
         let dir = tempfile::tempdir().unwrap();
-        let config = load_from(None, dir.path(), None).unwrap();
+        let config = load_from(None, dir.path(), None, false).unwrap();
         assert!(config.repository().is_err());
     }
 
@@ -188,14 +197,14 @@ mod tests {
             "repository = \"r\"\n\n[list]\nmax_visible_labels = 5\n",
         )
         .unwrap();
-        let config = load_from(None, dir.path(), None).unwrap();
+        let config = load_from(None, dir.path(), None, false).unwrap();
         assert_eq!(config.max_visible_labels(), 5);
     }
 
     #[test]
     fn max_visible_labels_defaults_to_three() {
         let dir = tempfile::tempdir().unwrap();
-        let config = load_from(None, dir.path(), None).unwrap();
+        let config = load_from(None, dir.path(), None, false).unwrap();
         assert_eq!(config.max_visible_labels(), 3);
     }
 
@@ -207,14 +216,14 @@ mod tests {
             "repository = \"r\"\n\n[note]\nmax_width = 100\n",
         )
         .unwrap();
-        let config = load_from(None, dir.path(), None).unwrap();
+        let config = load_from(None, dir.path(), None, false).unwrap();
         assert_eq!(config.note.max_width, Some(100));
     }
 
     #[test]
     fn max_width_defaults_to_none() {
         let dir = tempfile::tempdir().unwrap();
-        let config = load_from(None, dir.path(), None).unwrap();
+        let config = load_from(None, dir.path(), None, false).unwrap();
         assert_eq!(config.note.max_width, None);
     }
 
@@ -226,7 +235,7 @@ mod tests {
             "repository = \"r\"\n\n[note]\ndaily_filename = \"journal/%Y-%m-%d\"\n",
         )
         .unwrap();
-        let config = load_from(None, dir.path(), None).unwrap();
+        let config = load_from(None, dir.path(), None, false).unwrap();
         assert_eq!(
             config.note.daily_filename.as_deref(),
             Some("journal/%Y-%m-%d")
@@ -241,11 +250,83 @@ mod tests {
             "repository = \"r\"\n\n[note]\ndaily_title = \"Journal for %Y-%m-%d\"\ndaily_label = \"journal\"\n",
         )
         .unwrap();
-        let config = load_from(None, dir.path(), None).unwrap();
+        let config = load_from(None, dir.path(), None, false).unwrap();
         assert_eq!(
             config.note.daily_title.as_deref(),
             Some("Journal for %Y-%m-%d")
         );
         assert_eq!(config.note.daily_label.as_deref(), Some("journal"));
+    }
+
+    #[test]
+    fn global_flag_ignores_local_files() {
+        let global_dir = tempfile::tempdir().unwrap();
+        let global_path = global_dir.path().join("config.toml");
+        fs::write(&global_path, "repository = \"global\"\n").unwrap();
+
+        let local = tempfile::tempdir().unwrap();
+        fs::write(local.path().join(".noki.toml"), "repository = \"local\"\n").unwrap();
+
+        let config = load_from(Some(&global_path), local.path(), None, true).unwrap();
+        assert_eq!(config.repository().unwrap(), "global");
+    }
+
+    #[test]
+    fn global_flag_still_reads_global_file() {
+        let global_dir = tempfile::tempdir().unwrap();
+        let global_path = global_dir.path().join("config.toml");
+        fs::write(
+            &global_path,
+            "repository = \"global\"\n\n[note]\nmax_width = 42\n",
+        )
+        .unwrap();
+
+        let empty = tempfile::tempdir().unwrap();
+        let config = load_from(Some(&global_path), empty.path(), None, true).unwrap();
+        assert_eq!(config.repository().unwrap(), "global");
+        assert_eq!(config.note.max_width, Some(42));
+    }
+
+    #[test]
+    fn repository_override_wins_under_global() {
+        let global_dir = tempfile::tempdir().unwrap();
+        let global_path = global_dir.path().join("config.toml");
+        fs::write(&global_path, "repository = \"global\"\n").unwrap();
+
+        let empty = tempfile::tempdir().unwrap();
+        let config = load_from(
+            Some(&global_path),
+            empty.path(),
+            Some("from-cli".to_string()),
+            true,
+        )
+        .unwrap();
+        assert_eq!(config.repository().unwrap(), "from-cli");
+    }
+
+    #[test]
+    fn repository_override_implies_global_only() {
+        // global_only is false, but a --repository override is given: the local
+        // layer must still be skipped (override forces global-only).
+        let local = tempfile::tempdir().unwrap();
+        fs::write(
+            local.path().join(".noki.toml"),
+            "repository = \"local\"\n\n[note]\nfilename = \"from-local\"\n",
+        )
+        .unwrap();
+
+        let config = load_from(None, local.path(), Some("from-cli".to_string()), false).unwrap();
+
+        assert_eq!(config.repository().unwrap(), "from-cli");
+        // The local non-repository setting was ignored, proving the layer was skipped.
+        assert_eq!(config.note.filename, None);
+    }
+
+    #[test]
+    fn without_global_flag_local_still_wins() {
+        let local = tempfile::tempdir().unwrap();
+        fs::write(local.path().join(".noki.toml"), "repository = \"local\"\n").unwrap();
+        let config = load_from(None, local.path(), None, false).unwrap();
+        assert_eq!(config.repository().unwrap(), "local");
     }
 }
