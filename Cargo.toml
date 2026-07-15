@@ -6,6 +6,10 @@ license = "MIT"
 description = "A version control powered, AI friendly note taking app"
 repository = "https://github.com/paulvandermeijs/noki"
 readme = "README.md"
+# Ship only what the crate needs; keep dev tooling (docs/, skills/, .claude/,
+# .agents/, CLAUDE.md) out of the published package. Cargo.toml and Cargo.lock
+# are always included.
+include = ["src/**/*", "README.md", "LICENSE"]
 
 [dependencies]
 clap = { version = "4.6", features = ["derive"] }
