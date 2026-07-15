@@ -29,6 +29,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub repository: Option<String>,
 
+    /// Ignore folder-level .noki.toml files; use only the global config
+    #[arg(short = 'g', long, global = true)]
+    pub global: bool,
+
     #[command(flatten)]
     pub verbose: Verbosity,
 }
@@ -144,5 +148,18 @@ mod tests {
     fn parses_refresh_command() {
         let cli = Cli::parse_from(["noki", "refresh"]);
         assert!(matches!(cli.command, Some(Commands::Refresh)));
+    }
+
+    #[test]
+    fn parses_global_flag() {
+        let cli = Cli::parse_from(["noki", "--global", "ls"]);
+        assert!(cli.global);
+        assert!(matches!(cli.command, Some(Commands::List { json: false })));
+    }
+
+    #[test]
+    fn global_defaults_to_false() {
+        let cli = Cli::parse_from(["noki", "ls"]);
+        assert!(!cli.global);
     }
 }
