@@ -49,6 +49,18 @@ meta = { author = "Your Name" }
 max_visible_labels = 3
 ```
 
+By default noki merges the global config with any `.noki.toml` from the current
+directory upward (nearest wins). To bypass all folder-level config and use only
+your global config — handy for switching between a project's repo and your
+global notes repo — pass `--global` (short `-g`):
+
+```sh
+noki --global ls
+```
+
+Passing `--repository <url>` also implies `--global`: it ignores folder-level
+config and points noki at the given repository.
+
 Capture a note (opens your editor):
 
 ```sh
