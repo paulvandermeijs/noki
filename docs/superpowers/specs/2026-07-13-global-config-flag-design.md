@@ -1,6 +1,6 @@
 # Global Config Flag (`--global`) — Design
 
-**Status:** Draft (brainstorming) — awaiting user review
+**Status:** Implemented on branch `feat/global-config-flag`
 
 ## Goal
 
