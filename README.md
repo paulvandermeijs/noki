@@ -130,6 +130,18 @@ labels, and other frontmatter are kept as-is):
 noki edit 2026/06/02/10:00:00-my-new-note.md
 ```
 
+Pull in note changes made elsewhere — edited on another machine, or a wiki page
+changed directly on the remote — into your local clone. Nōki fetches from the
+remote and rebases your local clone onto it:
+
+```sh
+noki refresh
+```
+
+Capturing a note already syncs before it pushes, so you mainly need `refresh` to
+freshen the local clone before browsing (`ls`/`show`) when the remote may have
+moved on.
+
 ## Shell completion
 
 Nōki completes subcommands and flags, and — for `show` and `edit` — the
