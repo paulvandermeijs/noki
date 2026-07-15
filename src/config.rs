@@ -12,6 +12,11 @@ pub struct Config {
     pub repository: Option<String>,
     pub note: NoteConfig,
     pub list: ListConfig,
+    /// Whether folder-level `.noki.toml` was skipped (via `--global` or a
+    /// `--repository` override). Not read from any config file; set by the
+    /// loader so error hints can reflect the active resolution mode.
+    #[serde(skip)]
+    pub global_only: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -34,9 +39,12 @@ pub struct ListConfig {
 impl Config {
     /// The resolved repository, or an error if none was configured.
     pub fn repository(&self) -> Result<&str> {
-        self.repository
-            .as_deref()
-            .context("No repository configured. Set one with --repository or in .noki.toml.")
+        let hint = if self.global_only {
+            "No repository configured. Set one with --repository or in your global noki config file."
+        } else {
+            "No repository configured. Set one with --repository or in .noki.toml."
+        };
+        self.repository.as_deref().context(hint)
     }
 
     /// The maximum number of labels to show per note in the list.
@@ -81,6 +89,8 @@ pub(crate) fn load_from(
     if repository_override.is_some() {
         config.repository = repository_override;
     }
+
+    config.global_only = global_only;
 
     Ok(config)
 }
@@ -187,6 +197,37 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let config = load_from(None, dir.path(), None, false).unwrap();
         assert!(config.repository().is_err());
+    }
+
+    #[test]
+    fn default_error_hint_mentions_local_config() {
+        let config = Config::default();
+        let err = config.repository().unwrap_err().to_string();
+        assert!(err.contains(".noki.toml"));
+    }
+
+    #[test]
+    fn global_only_error_hint_omits_local_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = load_from(None, dir.path(), None, true).unwrap();
+        let err = config.repository().unwrap_err().to_string();
+        // Under --global the local .noki.toml is ignored, so it must not be
+        // suggested; point at the global config instead.
+        assert!(
+            !err.contains(".noki.toml"),
+            "hint should not mention .noki.toml: {err}"
+        );
+        assert!(
+            err.contains("global"),
+            "hint should mention global config: {err}"
+        );
+    }
+
+    #[test]
+    fn load_from_records_global_only_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = load_from(None, dir.path(), None, true).unwrap();
+        assert!(config.global_only);
     }
 
     #[test]
