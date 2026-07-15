@@ -28,7 +28,7 @@ In `src/template.rs`, the `Sanitize::Slug` arm of `resolve_token` currently emit
 - Applies to **every** `Sanitize::Slug` text field: `{title}`, `{labels}`, static meta such as `{author}`. The invariant is "a slug segment never exceeds the OS filename limit," not "titles are special."
 - `Sanitize::Raw` (e.g. `note.daily_title` rendering) is untouched.
 - The frontmatter `title:` is untouched — a dictated note's stored title remains the full first sentence; only the path is capped.
-- The `unknown-<field>` placeholder path is unaffected (placeholders are short; the cap still applies harmlessly).
+- The `unknown-<field>` placeholder path is unaffected — it bypasses the cap entirely. Field names are short and config-author-controlled (the same trust class as literal template text), so no cap is needed there.
 
 Headroom: 80 (slug) + 9 (`17:25:03-` prefix in the default template) + 3 (`.md`) = 92 bytes, far under 255.
 
